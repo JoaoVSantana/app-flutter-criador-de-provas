@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
 
-import '../../widgets/header.dart';
-import '../../widgets/bloconav.dart';
-import '../../Routes/routes.dart';
+//Esse vai ser usado só mais tarde, por enquanto somente mobile
+//import '../../widgets/header.dart';
+//import '../../widgets/bloconav.dart';
+//import '../../Routes/routes.dart';
 
 class HomeDesktop extends StatelessWidget {
   const HomeDesktop({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
+    return Container(child: Text('hello')); /*LayoutBuilder(
       builder: (context, constraints) {
         return Scaffold(
           backgroundColor: const Color.fromARGB(255, 228, 235, 230),
@@ -23,7 +24,7 @@ class HomeDesktop extends StatelessWidget {
                     // LADO ESQUERDO
                     Container(
                       width: 500,
-                      color: Color.fromARGB(255, 212, 214, 213),
+                      color: Color.fromARGB(255, 99, 148, 95),
 
                       child: Padding(
                         padding: const EdgeInsets.all(20),
@@ -41,7 +42,7 @@ class HomeDesktop extends StatelessWidget {
                               decoration: const BoxDecoration(
                                 border: Border(
                                   bottom: BorderSide(
-                                    color: Color(0xFF4C6B5E),
+                                    color: Color.fromARGB(255, 209, 226, 219),
                                     width: 1,
                                   ),
                                 ),
@@ -52,7 +53,7 @@ class HomeDesktop extends StatelessWidget {
                                   fontSize: 40,
                                   fontFamily: 'Oswald',
                                   fontWeight: FontWeight.w800,
-                                  color: Color(0xFF4C6B5E),
+                                  color: Color.fromARGB(255, 209, 226, 219),
                                 ),
                               ),
                             ),
@@ -65,9 +66,10 @@ class HomeDesktop extends StatelessWidget {
                                 'Menos tempo corrigindo. Mais tempo ensinando. '
                                 'Uma nova forma de criar, corrigir e acompanhar '
                                 'suas avaliações.',
+                                textAlign: TextAlign.justify,
                                 style: TextStyle(
                                   fontSize: 16,
-                                  color: Color.fromARGB(255, 26, 29, 28),
+                                  color: Color.fromARGB(255, 209, 226, 219),
                                 ),
                               ),
                             ),
@@ -80,9 +82,10 @@ class HomeDesktop extends StatelessWidget {
                                 'Visualize estatísticas, identifique padrões e '
                                 'acompanhe o desempenho dos seus alunos. Tudo de '
                                 'forma rápida, prática e inteligente.',
+                                textAlign: TextAlign.justify,
                                 style: TextStyle(
                                   fontSize: 15,
-                                  color: Color.fromARGB(255, 26, 29, 28),
+                                  color: Color.fromARGB(255, 209, 226, 219),
                                 ),
                               ),
                             ),
@@ -100,67 +103,81 @@ class HomeDesktop extends StatelessWidget {
                           spacing: 20,
                           runSpacing: 20,
                           children: [
-                            BlocoNav(
-                              title: 'Banco de questões',
-                              icon: Icons.library_books,
-                              onPressed: () {
-                                Navigator.pushNamed(
-                                  context,
-                                  AppRoutes.listaQuestoes,
-                                );
-                              },
+                            SizedBox(
+                              width: 200,
+                              height: 250,
+                              child: BlocoNav(
+                                title: 'Banco de questões',
+                                icon: Icons.library_books,
+                                onPressed: () {
+                                  Navigator.pushNamed(
+                                    context,
+                                    AppRoutes.listaQuestoes,
+                                  );
+                                },
+                              ),
                             ),
 
                             const SizedBox(height: 10),
 
-                            BlocoNav(
-                              title: 'Criar prova',
-                              icon: Icons.description,
-                              onPressed: () {
-                                Navigator.pushNamed(
-                                  context,
-                                  AppRoutes.criarProva,
-                                );
-                              },
+                            SizedBox(
+                              width: 200,
+                              height: 250,
+                              child: BlocoNav(
+                                title: 'Criar prova',
+                                icon: Icons.description,
+                                onPressed: () {
+                                  Navigator.pushNamed(
+                                    context,
+                                    AppRoutes.criarProva,
+                                  );
+                                },
+                              ),
                             ),
 
-                            const SizedBox(height: 10),
-
-                            BlocoNav(
-                              title: 'Corrigir prova',
-                              icon: Icons.check_circle,
-                              onPressed: () {
-                                Navigator.pushNamed(
-                                  context,
-                                  AppRoutes.correcao,
-                                );
-                              },
+                            SizedBox(
+                              width: 200,
+                              height: 250,
+                              child: BlocoNav(
+                                title: 'Corrigir prova',
+                                icon: Icons.check_circle,
+                                onPressed: () {
+                                  Navigator.pushNamed(
+                                    context,
+                                    AppRoutes.correcao,
+                                  );
+                                },
+                              ),
                             ),
 
-                            const SizedBox(height: 10),
-
-                            BlocoNav(
-                              title: 'Turmas e alunos',
-                              icon: Icons.groups,
-                              onPressed: () {
-                                Navigator.pushNamed(
-                                  context,
-                                  AppRoutes.listaTurmas,
-                                );
-                              },
+                            SizedBox(
+                              width: 200,
+                              height: 250,
+                              child: BlocoNav(
+                                title: 'Banco de questões',
+                                icon: Icons.library_books,
+                                onPressed: () {
+                                  Navigator.pushNamed(
+                                    context,
+                                    AppRoutes.listaQuestoes,
+                                  );
+                                },
+                              ),
                             ),
 
-                            const SizedBox(height: 10),
-
-                            BlocoNav(
-                              title: 'Relatórios',
-                              icon: Icons.analytics,
-                              onPressed: () {
-                                Navigator.pushNamed(
-                                  context,
-                                  AppRoutes.relatorios,
-                                );
-                              },
+                            SizedBox(
+                              width: 200,
+                              height: 250,
+                              child: BlocoNav(
+                                title: 'Relatórios',
+                                icon: Icons.analytics,
+                                onPressed: () {
+                                  Navigator.pushNamed(
+                                    context,
+                                    AppRoutes.relatorios,
+                                  );
+                                },
+                              ),
                             ),
                           ],
                         ),
@@ -173,6 +190,6 @@ class HomeDesktop extends StatelessWidget {
           ),
         );
       },
-    );
+      */
   }
 }

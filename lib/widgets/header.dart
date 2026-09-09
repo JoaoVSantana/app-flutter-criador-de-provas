@@ -17,9 +17,9 @@ class _HeaderState extends State<Header> {
     return Container(
       height: 100,
       decoration: const BoxDecoration(
-        color: Color.fromARGB(255, 196, 207, 199),
+        color: Color.fromARGB(255, 232, 236, 233),
         border: Border(
-          bottom: BorderSide(color: Color.fromARGB(31, 32, 31, 31), width: 1),
+          bottom: BorderSide(color: Color.fromARGB(31, 0, 0, 0), width: 1),
         ),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -46,7 +46,7 @@ class _HeaderState extends State<Header> {
 
             child: InkWell(
               onTap: () {
-                Navigator.pushNamed(context, AppRoutes.cadastro);
+                Navigator.pushNamed(context, AppRoutes.entrar);
               },
 
               child: Row(

@@ -8,20 +8,23 @@ class Navegar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        IconButton(
-          onPressed: onVoltar,
-          icon: const Icon(Icons.arrow_back_ios),
-          color: onVoltar == null ? Colors.grey : Colors.black,
-        ),
-        IconButton(
-          onPressed: onAvancar,
-          icon: const Icon(Icons.arrow_forward_ios),
-          color: onAvancar == null ? Colors.grey : Colors.black,
-        ),
-      ],
+    return Container(
+      color: const Color.fromARGB(255, 150, 194, 176),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          IconButton(
+            onPressed: onVoltar,
+            icon: const Icon(Icons.arrow_back_ios),
+            color: onVoltar == null ? Colors.grey : Colors.black,
+          ),
+          IconButton(
+            onPressed: onAvancar,
+            icon: const Icon(Icons.arrow_forward_ios),
+            color: onAvancar == null ? Colors.grey : Colors.black,
+          ),
+        ],
+      ),
     );
   }
 }

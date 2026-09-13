@@ -4,6 +4,12 @@ import '../../widgets/header.dart';
 import '../../widgets/drawernav.dart';
 import '../../widgets/navegar.dart';
 
+/// Breakpoints usados em todo o app.
+class Breakpoints {
+  static const double mobile = 600;
+  static const double tablet = 1024;
+}
+
 class Entrar extends StatefulWidget {
   const Entrar({super.key});
 
@@ -30,20 +36,198 @@ class _EntrarState extends State<Entrar> {
     super.dispose();
   }
 
+  Widget _buildAba(String texto, int index, double fontAba) {
+    final ativo = _paginaAtual == index;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => _irParaPagina(index),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          decoration: BoxDecoration(
+            color: ativo ? Colors.white : Colors.transparent,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          alignment: Alignment.center,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              texto,
+              maxLines: 1,
+              style: TextStyle(
+                fontSize: fontAba,
+                fontWeight: FontWeight.w400,
+                fontFamily: 'Poppins',
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  InputDecoration _decoracaoCampo(String label) {
+    return InputDecoration(
+      labelText: label,
+      filled: true,
+      fillColor: Colors.white,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide.none,
+      ),
+    );
+  }
+
+  Widget _botao(String texto, VoidCallback onPressed) {
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton(
+        onPressed: onPressed,
+        style: ElevatedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          backgroundColor: const Color.fromARGB(255, 47, 51, 49),
+          foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+        child: Text(
+          texto,
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        ),
+      ),
+    );
+  }
+
+  Widget _paginaLogin(double paddingFormulario) {
+    return SingleChildScrollView(
+      padding: EdgeInsets.symmetric(horizontal: paddingFormulario),
+      child: Column(
+        children: [
+          TextField(decoration: _decoracaoCampo('Email')),
+          const SizedBox(height: 16),
+          TextField(obscureText: true, decoration: _decoracaoCampo('Senha')),
+          const SizedBox(height: 24),
+          _botao('Entrar', () {}),
+        ],
+      ),
+    );
+  }
+
+  Widget _paginaCadastro(double paddingFormulario) {
+    return SingleChildScrollView(
+      padding: EdgeInsets.symmetric(horizontal: paddingFormulario),
+      child: Column(
+        children: [
+          TextField(decoration: _decoracaoCampo('Nome')),
+          const SizedBox(height: 16),
+          TextField(decoration: _decoracaoCampo('Sobrenome')),
+          const SizedBox(height: 16),
+          TextField(decoration: _decoracaoCampo('Email')),
+          const SizedBox(height: 16),
+          TextField(
+            keyboardType: TextInputType.number,
+            decoration: _decoracaoCampo('CPF'),
+          ),
+          const SizedBox(height: 16),
+          TextField(obscureText: true, decoration: _decoracaoCampo('Senha')),
+          const SizedBox(height: 24),
+          _botao('Cadastrar', () {}),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final larguraTela = constraints.maxWidth;
 
-        // Imagem escala com a largura da tela, com limites mín/máx
-        final tamanhoImagem = (larguraTela * 0.45).clamp(120.0, 200.0);
+        final isMobile = larguraTela < Breakpoints.mobile;
+        final isTablet =
+            larguraTela >= Breakpoints.mobile &&
+            larguraTela < Breakpoints.tablet;
+        final isDesktop = larguraTela >= Breakpoints.tablet;
 
-        // Fonte das abas Login/Cadastro
-        final fontAba = (larguraTela * 0.05).clamp(16.0, 20.0);
+        final double tamanhoImagem = isMobile
+            ? 140
+            : isTablet
+            ? 180
+            : 220;
 
-        // Padding lateral dos formulários
-        final paddingFormulario = larguraTela * 0.03;
+        final double fontAba = isMobile ? 16 : 20;
+        final double paddingFormulario = isMobile ? 12 : 24;
+
+        // Conteúdo do card: abas + formulário deslizante
+        final conteudoCard = Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _buildAba('Login', 0, fontAba),
+                const SizedBox(width: 16),
+                _buildAba('Cadastro', 1, fontAba),
+              ],
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              // Altura fixa para o PageView poder rolar internamente
+              height: isMobile ? 420 : 460,
+              child: PageView(
+                controller: _pageController,
+                onPageChanged: (index) {
+                  setState(() => _paginaAtual = index);
+                },
+                children: [
+                  _paginaLogin(paddingFormulario),
+                  _paginaCadastro(paddingFormulario),
+                ],
+              ),
+            ),
+          ],
+        );
+
+        // Em telas grandes: imagem ao lado do formulário, formulário com
+        // largura máxima para não esticar. Em telas pequenas: tudo empilhado.
+        final conteudoPrincipal = isDesktop || isTablet
+            ? Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 900),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Image.asset(
+                        'assets/images/criar_prova.png',
+                        width: tamanhoImagem,
+                        height: tamanhoImagem,
+                        fit: BoxFit.contain,
+                      ),
+                      const SizedBox(width: 32),
+                      Expanded(child: conteudoCard),
+                    ],
+                  ),
+                ),
+              )
+            : Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 480),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Image.asset(
+                        'assets/images/criar_prova.png',
+                        width: tamanhoImagem,
+                        height: tamanhoImagem,
+                        fit: BoxFit.contain,
+                      ),
+                      const SizedBox(height: 12),
+                      conteudoCard,
+                    ],
+                  ),
+                ),
+              );
 
         return Scaffold(
           drawer: const DrawerNav(),
@@ -66,275 +250,16 @@ class _EntrarState extends State<Entrar> {
                 child: Container(
                   width: double.infinity,
                   color: const Color.fromARGB(255, 228, 235, 230),
-                  child: Padding(
-                    padding: const EdgeInsets.all(5),
-                    child: Column(
-                      children: [
-                        Image.asset(
-                          'assets/images/criar_prova.png',
-                          width: tamanhoImagem,
-                          height: tamanhoImagem,
-                          fit: BoxFit.contain,
-                        ),
-                        const SizedBox(height: 12),
-
-                        // Botões "abas" que também mudam a página
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            GestureDetector(
-                              onTap: () => _irParaPagina(0),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 8,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: _paginaAtual == 0
-                                      ? Colors.white
-                                      : Colors.transparent,
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                child: Text(
-                                  'Login',
-                                  style: TextStyle(
-                                    fontSize: fontAba,
-                                    fontWeight: FontWeight.w400,
-                                    fontFamily: 'Poppins',
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            GestureDetector(
-                              onTap: () => _irParaPagina(1),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 8,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: _paginaAtual == 1
-                                      ? Colors.white
-                                      : Colors.transparent,
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                child: Text(
-                                  'Cadastro',
-                                  style: TextStyle(
-                                    fontSize: fontAba,
-                                    fontWeight: FontWeight.w400,
-                                    fontFamily: 'Poppins',
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-
-                        const SizedBox(height: 12),
-
-                        // Conteúdo que desliza
-                        Expanded(
-                          child: PageView(
-                            controller: _pageController,
-                            onPageChanged: (index) {
-                              setState(() => _paginaAtual = index);
-                            },
-                            children: [
-                              // Página "Login"
-                              SingleChildScrollView(
-                                padding: EdgeInsets.symmetric(
-                                  horizontal: paddingFormulario,
-                                ),
-                                child: Column(
-                                  children: [
-                                    TextField(
-                                      decoration: InputDecoration(
-                                        labelText: 'Email',
-                                        filled: true,
-                                        fillColor: Colors.white,
-                                        border: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            12,
-                                          ),
-                                          borderSide: BorderSide.none,
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 16),
-                                    TextField(
-                                      obscureText: true,
-                                      decoration: InputDecoration(
-                                        labelText: 'Senha',
-                                        filled: true,
-                                        fillColor: Colors.white,
-                                        border: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            12,
-                                          ),
-                                          borderSide: BorderSide.none,
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 24),
-                                    SizedBox(
-                                      width: double.infinity,
-                                      child: ElevatedButton(
-                                        onPressed: () {},
-                                        style: ElevatedButton.styleFrom(
-                                          padding: const EdgeInsets.symmetric(
-                                            vertical: 14,
-                                          ),
-                                          backgroundColor: const Color.fromARGB(
-                                            255,
-                                            47,
-                                            51,
-                                            49,
-                                          ),
-                                          foregroundColor: Colors.white,
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              12,
-                                            ),
-                                          ),
-                                        ),
-                                        child: const Text(
-                                          'Entrar',
-                                          style: TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-
-                              // Página "Cadastro"
-                              SingleChildScrollView(
-                                padding: EdgeInsets.symmetric(
-                                  horizontal: paddingFormulario,
-                                ),
-                                child: Column(
-                                  children: [
-                                    TextField(
-                                      decoration: InputDecoration(
-                                        labelText: 'Nome',
-                                        filled: true,
-                                        fillColor: Colors.white,
-                                        border: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            12,
-                                          ),
-                                          borderSide: BorderSide.none,
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 16),
-                                    TextField(
-                                      decoration: InputDecoration(
-                                        labelText: 'Sobrenome',
-                                        filled: true,
-                                        fillColor: Colors.white,
-                                        border: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            12,
-                                          ),
-                                          borderSide: BorderSide.none,
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 16),
-                                    TextField(
-                                      decoration: InputDecoration(
-                                        labelText: 'Email',
-                                        filled: true,
-                                        fillColor: Colors.white,
-                                        border: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            12,
-                                          ),
-                                          borderSide: BorderSide.none,
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 16),
-                                    TextField(
-                                      keyboardType: TextInputType.number,
-                                      decoration: InputDecoration(
-                                        labelText: 'CPF',
-                                        filled: true,
-                                        fillColor: Colors.white,
-                                        border: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            12,
-                                          ),
-                                          borderSide: BorderSide.none,
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 16),
-                                    TextField(
-                                      obscureText: true,
-                                      decoration: InputDecoration(
-                                        labelText: 'Senha',
-                                        filled: true,
-                                        fillColor: Colors.white,
-                                        border: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            12,
-                                          ),
-                                          borderSide: BorderSide.none,
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 24),
-                                    SizedBox(
-                                      width: double.infinity,
-                                      child: ElevatedButton(
-                                        onPressed: () {},
-                                        style: ElevatedButton.styleFrom(
-                                          padding: const EdgeInsets.symmetric(
-                                            vertical: 14,
-                                          ),
-                                          backgroundColor: const Color.fromARGB(
-                                            255,
-                                            47,
-                                            51,
-                                            49,
-                                          ),
-                                          foregroundColor: Colors.white,
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              12,
-                                            ),
-                                          ),
-                                        ),
-                                        child: const Text(
-                                          'Cadastrar',
-                                          style: TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: isMobile ? 8 : 24,
+                    vertical: 16,
                   ),
+                  child: SingleChildScrollView(child: conteudoPrincipal),
                 ),
               ),
+
               const SizedBox(height: 24),
 
-              // Setas mudam de comportamento conforme a página ativa
               Navegar(
                 onVoltar: _paginaAtual == 0
                     ? () => Navigator.pop(context)

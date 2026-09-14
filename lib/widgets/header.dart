@@ -19,8 +19,7 @@ class _HeaderState extends State<Header> {
         final larguraTela = constraints.maxWidth;
         final isMobile = larguraTela < 600;
 
-        // Altura do header e tamanho do logo escalam com a tela,
-        // sempre dentro de um mínimo e máximo razoáveis.
+        //ajusta a tela conforme tamanho
         final double alturaHeader = (larguraTela * 0.14).clamp(64.0, 100.0);
         final double larguraLogo = (larguraTela * 0.22).clamp(100.0, 160.0);
         final double alturaLogo = alturaHeader;
@@ -82,8 +81,7 @@ class _HeaderState extends State<Header> {
 
                       const SizedBox(width: 8),
 
-                      // Em telas muito estreitas, esconde o texto e mantém
-                      // só o ícone, evitando overflow horizontal.
+                     //Esconder icone se a tela for muito pequena
                       if (!isMobile)
                         Text(
                           'Entrar',

@@ -17,17 +17,14 @@ O sistema é destinado principalmente a **professores que precisam criar, corrig
 ## Principais funcionalidades
 
 * Leitura de QR Code da prova;
-* Correção automática das respostas;
 * Cálculo automático da nota;
 * Criação de provas;
 * Banco de questões;
 * Embaralhamento de questões e alternativas;
 * Criação de diferentes versões de uma prova;
-* Cadastro/importação de alunos;
 * Gerenciamento de turmas;
 * Relatórios de desempenho;
 * Estatísticas das respostas;
-* Exportação das notas para Excel;
 * Personalização do layout da prova;
 * Login e gerenciamento dos dados do professor.
 
@@ -52,30 +49,6 @@ lib/
     ├── blocos_de_navegacao/
     └── menu_de_pesquisa/
     
-### Routes
-
-Responsável pelas **rotas e navegação** entre as telas do aplicativo.
-
-### Screens
-
-Contém as principais telas do sistema:
-
-* **Home** — página inicial;
-* **Turma** — gerenciamento das turmas e alunos;
-* **Relatórios** — visualização dos resultados e estatísticas;
-* **Banco de Questões** — cadastro e gerenciamento das questões;
-* **Correção de Provas** — processo de leitura e correção das provas;
-* **Entrar** — autenticação do professor;
-* **Criar Prova** — criação e configuração das avaliações.
-
-### Widgets
-
-Contém componentes reutilizáveis da interface:
-
-* **Header** — cabeçalho das telas;
-* **Blocos de Navegação** — botões/blocos utilizados para acessar as funcionalidades;
-* **Menu de Pesquisa** — componente utilizado para realizar pesquisas no sistema.
-
 ## Benefícios
 
 ### Para os professores

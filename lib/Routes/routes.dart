@@ -32,7 +32,7 @@ class Routes extends StatelessWidget {
         AppRoutes.criarProva: (context) => const Prova(),
         AppRoutes.correcao: (context) => Corrigir(),
         AppRoutes.entrar: (context) => const Entrar(),
-        AppRoutes.listaTurmas: (context) => const Turmas(),
+        AppRoutes.listaTurmas: (context) => TurmasScreen(),
         AppRoutes.relatorios: (context) => const Relatorios(),
       },
     );

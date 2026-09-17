@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import '../screens/Home/home.dart';
 import '../screens/BancoQuestoes/questoes.dart';
 import '../screens/CriarProva/prova.dart';
-import '../screens/Relatórios/relatorios.dart';
+import '../screens/Relatorios/relatorios.dart';
 import '../screens/Turmas/turmas.dart';
 import '../screens/CorrigirProvas/corrigir.dart';
 import '../screens/Entrar/entrar.dart';

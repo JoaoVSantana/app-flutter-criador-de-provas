@@ -12,7 +12,6 @@ class _CorrigirState extends State<Corrigir> {
 
   final List<String> etapas = ['Ler QR Code', 'Ler Gabarito', 'Ler Prova'];
 
-  // Cores utilizadas no sistema
   static const Color fundo = Color.fromARGB(255, 228, 235, 230);
   static const Color cinza = Color.fromARGB(255, 212, 214, 213);
   static const Color verde = Color(0xFF4C6B5E);
@@ -78,10 +77,6 @@ class _CorrigirState extends State<Corrigir> {
 
     return _buildEtapa();
   }
-
-  // ============================================================
-  // TELA INICIAL
-  // ============================================================
 
   Widget _buildInicio() {
     return Container(
@@ -157,18 +152,11 @@ class _CorrigirState extends State<Corrigir> {
     );
   }
 
-  // ============================================================
-  // ETAPAS DA CORREÇÃO
-  // ============================================================
-
   Widget _buildEtapa() {
     final index = etapa - 1;
 
     return Column(
       children: [
-        // Título
-
-        // Indicador das etapas
         Row(
           children: List.generate(etapas.length, (index) {
             final concluida = index < etapa;
@@ -205,7 +193,6 @@ class _CorrigirState extends State<Corrigir> {
 
         const SizedBox(height: 50),
 
-        // Card principal
         Container(
           width: double.infinity,
           padding: const EdgeInsets.all(45),
@@ -248,8 +235,6 @@ class _CorrigirState extends State<Corrigir> {
 
               const SizedBox(height: 35),
 
-              // Simulação
-              // Ação da etapa
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(22),
@@ -259,11 +244,7 @@ class _CorrigirState extends State<Corrigir> {
                 ),
                 child: Row(
                   children: [
-                    Icon(
-                      _getIcon(index),
-                      color: verde,
-                      size: 35,
-                    ),
+                    Icon(_getIcon(index), color: verde, size: 35),
 
                     const SizedBox(width: 15),
 
@@ -284,9 +265,7 @@ class _CorrigirState extends State<Corrigir> {
 
                           Text(
                             _getTextoAcao(index),
-                            style: TextStyle(
-                              color: texto.withOpacity(0.75),
-                            ),
+                            style: TextStyle(color: texto.withOpacity(0.75)),
                           ),
                         ],
                       ),
@@ -326,10 +305,6 @@ class _CorrigirState extends State<Corrigir> {
     );
   }
 
-  // ============================================================
-  // RESULTADO
-  // ============================================================
-
   Widget _buildResultado() {
     return SingleChildScrollView(
       child: Column(
@@ -365,7 +340,6 @@ class _CorrigirState extends State<Corrigir> {
 
           const SizedBox(height: 30),
 
-          // Nota
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(25),
@@ -405,8 +379,6 @@ class _CorrigirState extends State<Corrigir> {
 
           const SizedBox(height: 15),
 
-          // Estatísticas
-          // Estatísticas responsivas
           LayoutBuilder(
             builder: (context, constraints) {
               final bool mobile = constraints.maxWidth < 600;
@@ -430,11 +402,7 @@ class _CorrigirState extends State<Corrigir> {
 
                   SizedBox(
                     width: larguraCard,
-                    child: _buildInfoCard(
-                      'Erros',
-                      '3',
-                      Icons.cancel_outlined,
-                    ),
+                    child: _buildInfoCard('Erros', '3', Icons.cancel_outlined),
                   ),
 
                   SizedBox(
@@ -461,7 +429,6 @@ class _CorrigirState extends State<Corrigir> {
 
           const SizedBox(height: 15),
 
-          // Dados da prova
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(25),
@@ -530,10 +497,6 @@ class _CorrigirState extends State<Corrigir> {
     );
   }
 
-  // ============================================================
-  // CARD DE INFORMAÇÃO
-  // ============================================================
-
   Widget _buildInfoCard(String titulo, String valor, IconData icone) {
     return Container(
       padding: const EdgeInsets.all(18),
@@ -568,10 +531,6 @@ class _CorrigirState extends State<Corrigir> {
     );
   }
 
-  // ============================================================
-  // PEGAR TÍTULO DA AÇÃO
-  // ============================================================
-
   String _getTituloAcao(int index) {
     switch (index) {
       case 0:
@@ -598,10 +557,6 @@ class _CorrigirState extends State<Corrigir> {
     }
   }
 
-  // ============================================================
-  // ÍCONES
-  // ============================================================
-
   IconData _getIcon(int index) {
     switch (index) {
       case 0:
@@ -614,10 +569,6 @@ class _CorrigirState extends State<Corrigir> {
         return Icons.check;
     }
   }
-
-  // ============================================================
-  // DESCRIÇÕES
-  // ============================================================
 
   String _getDescricao(int index) {
     switch (index) {

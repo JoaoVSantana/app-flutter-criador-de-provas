@@ -5,12 +5,12 @@ class BlocoNav extends StatefulWidget {
     super.key,
     required this.title,
     required this.onPressed,
-    required this.icon,
+    required this.image,
   });
 
   final String title;
   final VoidCallback onPressed;
-  final IconData icon;
+  final String image;
 
   @override
   State<BlocoNav> createState() => _BlocoNavState();
@@ -18,6 +18,7 @@ class BlocoNav extends StatefulWidget {
 
 class _BlocoNavState extends State<BlocoNav> {
   bool isHover = false;
+  bool isPressed = false;
 
   @override
   Widget build(BuildContext context) {
@@ -36,40 +37,52 @@ class _BlocoNavState extends State<BlocoNav> {
         });
       },
 
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        height: 250,
-        width: 200,
+      child: InkWell(
+        onTap: widget.onPressed,
+        onTapDown: (_) {
+          setState(() {
+            isPressed = true;
+          });
+        },
+        onTapUp: (_) {
+          setState(() {
+            isPressed = false;
+          });
+        },
+        onTapCancel: () {
+          setState(() {
+            isPressed = false;
+          });
+        },
+        borderRadius: BorderRadius.circular(20),
 
-        decoration: BoxDecoration(
-          color: isHover
-              ? const Color(0xFF4C6B5E)
-              : const Color.fromARGB(255, 214, 224, 211),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
 
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.10),
-              blurRadius: 10,
-              offset: const Offset(0, 5),
-            ),
-          ],
-        ),
+          decoration: BoxDecoration(
+            color: isHover || isPressed
+                ? const Color(0xFF4C6B5E)
+                : const Color.fromARGB(255, 214, 224, 211),
 
-        child: InkWell(
-          onTap: widget.onPressed,
+            borderRadius: BorderRadius.circular(20),
 
-          borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.10),
+                blurRadius: 10,
+                offset: const Offset(0, 5),
+              ),
+            ],
+          ),
 
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(
-                widget.icon,
-                size: 30,
-                color: isHover
-                    ? const Color(0xFFF3F6F2)
-                    : const Color(0xFF4C6B5E),
+              Image.asset(
+                widget.image,
+                width: 80,
+                height: 80,
+                fit: BoxFit.contain, //serve para ajustar a imagem dentro do container, mantendo a proporção
               ),
 
               const SizedBox(height: 15),
@@ -80,7 +93,8 @@ class _BlocoNavState extends State<BlocoNav> {
                 style: TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w100,
-                  color: isHover
+                  fontFamily: 'Oswald',
+                  color: isHover || isPressed
                       ? const Color(0xFFF3F6F2)
                       : const Color(0xFF4C6B5E),
                 ),

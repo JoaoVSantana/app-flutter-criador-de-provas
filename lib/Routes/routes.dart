@@ -4,10 +4,10 @@ import 'package:flutter/material.dart';
 import '../screens/Home/home.dart';
 import '../screens/BancoQuestoes/questoes.dart';
 import '../screens/CriarProva/prova.dart';
-import '../screens/Relatórios/relatorios.dart';
+import '../screens/Relatorios/relatorios.dart';
 import '../screens/Turmas/turmas.dart';
 import '../screens/CorrigirProvas/corrigir.dart';
-import '../screens/Cadastro/cadastro.dart';
+import '../screens/Entrar/entrar.dart';
 
 class AppRoutes {
   static const home = '/';
@@ -16,7 +16,7 @@ class AppRoutes {
   static const listaTurmas = '/turmas';
   static const correcao = '/corrigir';
   static const relatorios = '/relatorios';
-  static const cadastro = '/cadastro';
+  static const entrar = '/entrar';
 }
 
 class Routes extends StatelessWidget {
@@ -31,8 +31,8 @@ class Routes extends StatelessWidget {
         AppRoutes.listaQuestoes: (context) => const ListaQuestoes(),
         AppRoutes.criarProva: (context) => const Prova(),
         AppRoutes.correcao: (context) => Corrigir(),
-        AppRoutes.cadastro: (context) => const Cadastro(),
-        AppRoutes.listaTurmas: (context) => const Turmas(),
+        AppRoutes.entrar: (context) => const Entrar(),
+        AppRoutes.listaTurmas: (context) => TurmasScreen(),
         AppRoutes.relatorios: (context) => const Relatorios(),
       },
     );

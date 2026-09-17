@@ -151,7 +151,7 @@ flutter run -d <id-do-dispositivo>
 
 ## Link do vídeo do app
  Segue: 
- https://youtube.com/shorts/QyHYSmMLaSQ 
 
+https://drive.google.com/file/d/1g_FS940_tRWTGYRzU62vdqGHMQPuO8nk/view?usp=drive_link
  
 

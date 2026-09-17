@@ -93,4 +93,65 @@ lib/
 * **RNF08 – Design:** a aplicação deverá utilizar um design minimalista, priorizando legibilidade e facilidade de uso.
 * **RNF09 – Responsividade:** a interface deverá se adaptar a diferentes tamanhos de tela e dispositivos.
 
+## Como executar o projeto
+
+### Pré-requisitos
+
+Antes de executar o projeto, certifique-se de ter instalado:
+
+* [Flutter](https://docs.flutter.dev/get-started/install)
+* [Dart](https://dart.dev/get-dart)
+* Android Studio (caso utilize um emulador Android)
+* Git
+
+Para verificar se o Flutter está configurado corretamente:
+
+```bash
+flutter doctor
+```
+
+### Clone o projeto/ repositório
+
+```bash
+git clone URL_DO_REPOSITORIO
+```
+
+Entre na pasta do projeto:
+
+```bash
+cd nome-do-projeto
+```
+
+### Instalando as dependências para fontes, imagens etc...
+
+Execute:
+
+```bash
+flutter pub get
+```
+
+### Executando o projeto
+
+Para verificar os dispositivos disponíveis:
+
+```bash
+flutter devices
+```
+
+Em seguida, execute o projeto:
+
+```bash
+flutter run -d chrome
+```
+ou, para um Android:
+
+```bash
+flutter run -d <id-do-dispositivo>
+```
+
+## Link do vídeo do app
+ Segue: 
+ https://youtube.com/shorts/QyHYSmMLaSQ 
+
+ 
 

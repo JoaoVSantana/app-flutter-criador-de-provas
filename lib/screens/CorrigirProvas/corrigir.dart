@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../../widgets/drawernav.dart';
+import '../../widgets/header.dart';
+import '../../widgets/navegar.dart';
+
 class Corrigir extends StatefulWidget {
   const Corrigir({super.key});
 
@@ -45,22 +49,34 @@ class _CorrigirState extends State<Corrigir> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: fundo,
-
-      appBar: AppBar(
-        backgroundColor: fundo,
-        foregroundColor: verde,
-        elevation: 0,
-      ),
-
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(30),
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 900),
-              child: _buildConteudo(),
+        child: Column(
+          children: [
+            const Header(),
+
+            Expanded(
+              child: Scaffold(
+                drawer: const DrawerNav(),
+                backgroundColor: fundo,
+                appBar: AppBar(
+                  backgroundColor: fundo,
+                  foregroundColor: verde,
+                  elevation: 0,
+                ),
+                body: SingleChildScrollView(
+                  padding: const EdgeInsets.all(30),
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 900),
+                      child: _buildConteudo(),
+                    ),
+                  ),
+                ),
+              ),
             ),
-          ),
+            const Navegar(onVoltar: null, onAvancar: null),
+            const SizedBox(height: 16),
+          ],
         ),
       ),
     );

@@ -1,5 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+
+import '../../respostaErro/respostaErro.dart';
+
+import '../Home/home.dart';
+
+import '/service/usuario_service.dart';
 
 import 'login.dart' show decoracaoCampo, BotaoPrincipal;
 
@@ -54,14 +62,26 @@ class _CadastroFormState extends State<CadastroForm> {
       _mostrarErro('Preencha ao menos nome, e-mail e senha.');
       return;
     }
-
     setState(() => _carregando = true);
     try {
-      // TODO: sua lógica de cadastro aqui
-      // (use nome, sobrenome, email, cpf e senha)
-      //
-      // Quando o cadastro der certo, chame:
-      // widget.onCadastrado(email);
+      await UsuarioService().cadastrar(
+        nome: nome,
+        sobrenome: sobrenome,
+        cpf: cpf,
+        email: email,
+        senha: senha,
+      );
+      if (!mounted) return;
+      Navigator.push(context, MaterialPageRoute(builder: (_) => const Home()));
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      _mostrarErro(traduzirErro(e.code));
+    } on FirebaseException catch (e) {
+      if (!mounted) return;
+      _mostrarErro('Erro ao salvar dados: ${e.code}');
+    } catch (e) {
+      if (!mounted) return;
+      _mostrarErro('Erro inesperado: $e');
     } finally {
       if (mounted) setState(() => _carregando = false);
     }

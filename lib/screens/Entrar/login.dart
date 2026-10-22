@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+import '../Home/home.dart';
+import '/service/usuario_service.dart';
+import '../../respostaErro/respostaErro.dart';
+
 class LoginForm extends StatefulWidget {
   final TextEditingController emailController;
   final double padding;
@@ -42,7 +46,15 @@ class _LoginFormState extends State<LoginForm> {
 
     setState(() => _carregando = true);
     try {
-      // TODO: sua lógica de login aqui (use `email` e `senha`)
+      await UsuarioService().entrar(email: email, senha: senha);
+      if (!mounted) return;
+      Navigator.push(context, MaterialPageRoute(builder: (_) => const Home()));
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      _mostrarErro(traduzirErro(e.code));
+    } catch (e) {
+      if (!mounted) return;
+      _mostrarErro('Erro inesperado: $e');
     } finally {
       if (mounted) setState(() => _carregando = false);
     }

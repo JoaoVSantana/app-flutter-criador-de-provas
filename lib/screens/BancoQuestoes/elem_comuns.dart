@@ -1,17 +1,11 @@
 import 'package:flutter/material.dart';
 
-// ---------------------------------------------------------------------------
-// Cores
-// ---------------------------------------------------------------------------
 const kGreen = Color(0xFF2F5D4E);
 const kCard = Color(0xFFD7E2D4);
 const kListCard = Color(0xFFF1F3EE);
 const kOrange = Color(0xFFC98B2E);
 const kBg = Color(0xFFFEF7FF);
 
-// ---------------------------------------------------------------------------
-// Enums e extensões
-// ---------------------------------------------------------------------------
 enum Nivel { baixo, medio, alto }
 
 enum Tipo { multipla, vf, dissertativa }
@@ -37,9 +31,6 @@ extension TipoX on Tipo {
   };
 }
 
-// ---------------------------------------------------------------------------
-// Modelo
-// ---------------------------------------------------------------------------
 class Question {
   final String id;
   final String materia;
@@ -48,9 +39,9 @@ class Question {
   final Tipo tipo;
   final List<String> turmas;
   final String enunciado;
-  final List<String> alternativas; // vazio na dissertativa
-  final Set<int> corretas; // índices das alternativas corretas
-  final String respostaEsperada; // só dissertativa (opcional)
+  final List<String> alternativas;
+  final Set<int> corretas;
+  final String respostaEsperada;
 
   const Question({
     required this.id,
@@ -66,7 +57,6 @@ class Question {
   });
 }
 
-// Listas de exemplo (depois você troca pelos dados reais do app)
 const kMaterias = [
   'Matemática',
   'Biologia',
@@ -76,10 +66,6 @@ const kMaterias = [
 ];
 const kTurmas = ['1º Ano A', '2º Ano B'];
 
-// ---------------------------------------------------------------------------
-// Título da tela com o botão de três risquinhas que abre o drawer.
-// O Builder garante que o context enxergue o Scaffold da tela.
-// ---------------------------------------------------------------------------
 class MenuTitle extends StatelessWidget {
   final String title;
   final double fontSize;
@@ -114,9 +100,6 @@ class MenuTitle extends StatelessWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Estado vazio
-// ---------------------------------------------------------------------------
 class EmptyState extends StatelessWidget {
   const EmptyState({super.key});
 
@@ -143,9 +126,7 @@ class EmptyState extends StatelessWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Card de questão (reutilizável: no banco e, depois, na tela de criar prova)
-// ---------------------------------------------------------------------------
+//card de questoes
 class QuestionCard extends StatelessWidget {
   final Question question;
   final VoidCallback? onDelete;

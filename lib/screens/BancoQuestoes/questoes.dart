@@ -6,6 +6,7 @@ import '../../widgets/drawernav.dart';
 import 'elem_comuns.dart';
 import 'criar_questao.dart';
 import 'pesquisar_questao.dart';
+import '/service/questao_service.dart'; // AJUSTE o caminho (Ctrl+. corrige)
 
 // ---------------------------------------------------------------------------
 // Tela principal do Banco de Questões
@@ -18,31 +19,10 @@ class ListaQuestoes extends StatefulWidget {
 }
 
 class _ListaQuestoesState extends State<ListaQuestoes> {
-  final List<Question> _questions = [
-    const Question(
-      id: '1',
-      materia: 'Matemática',
-      assunto: 'Funções',
-      nivel: Nivel.medio,
-      tipo: Tipo.multipla,
-      turmas: ['1º Ano A'],
-      enunciado: 'Qual é o valor de f(2) para f(x) = 3x + 1?',
-      alternativas: ['5', '6', '7', '8'],
-      corretas: {2},
-    ),
-    const Question(
-      id: '2',
-      materia: 'Biologia',
-      assunto: 'Citologia',
-      nivel: Nivel.baixo,
-      tipo: Tipo.vf,
-      turmas: ['2º Ano B'],
-      enunciado:
-          'A mitocôndria é responsável pela produção de energia da célula.',
-      alternativas: ['Verdadeiro', 'Falso'],
-      corretas: {0},
-    ),
-  ];
+  final _service = QuestaoService();
+
+  // Criado uma vez só, para o stream não reiniciar a cada rebuild
+  late final Stream<List<Question>> _stream = _service.observarMinhas();
 
   Future<void> _openCreate() async {
     final q = await showModalBottomSheet<Question>(
@@ -55,100 +35,116 @@ class _ListaQuestoesState extends State<ListaQuestoes> {
       ),
       builder: (_) => const CreateQuestionSheet(),
     );
-    if (q != null && mounted) {
-      setState(() => _questions.insert(0, q));
+    if (q == null || !mounted) return;
+
+    try {
+      await _service.criar(q);
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Questão criada com sucesso!')),
       );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Erro ao salvar a questão: $e')));
     }
   }
 
   void _openSearch() {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => SearchQuestionsPage(
-          questions: _questions,
-          onDelete: (id) =>
-              setState(() => _questions.removeWhere((q) => q.id == id)),
-        ),
-      ),
+      MaterialPageRoute(builder: (_) => const SearchQuestionsPage()),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final recentes = _questions.take(3).toList();
-    return Scaffold(
-      drawer: const DrawerNav(),
-      appBar: const PreferredSize(
-        preferredSize: Size.fromHeight(60),
-        child: Header(),
-      ),
-      bottomNavigationBar: Navegar(
-        onVoltar: () => Navigator.pop(context),
-        onAvancar: () {},
-      ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const MenuTitle(title: 'Banco de questões', fontSize: 28),
-              const SizedBox(height: 4),
-              Text(
-                'Crie questões novas ou encontre as que já estão no banco.',
-                style: TextStyle(fontSize: 14, color: Colors.grey.shade700),
-              ),
-              const SizedBox(height: 20),
-              Row(
-                children: [
-                  Expanded(
-                    child: _BigButton(
-                      icon: Icons.search,
-                      label: 'Pesquisar questão',
-                      onTap: _openSearch,
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: _BigButton(
-                      icon: Icons.add_circle_outline,
-                      label: 'Criar questão',
-                      onTap: _openCreate,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 28),
-              Row(
-                children: [
-                  const Text(
-                    'Últimas questões',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-                  ),
-                  const Spacer(),
-                  Text(
-                    '${_questions.length} no banco',
-                    style: TextStyle(color: Colors.grey.shade700),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              if (recentes.isEmpty)
-                const EmptyState()
-              else
-                ...recentes.map(
-                  (q) => Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: QuestionCard(question: q),
-                  ),
-                ),
-            ],
+    return StreamBuilder<List<Question>>(
+      stream: _stream,
+      builder: (context, snap) {
+        final todas = snap.data ?? [];
+        final recentes = todas.take(3).toList();
+
+        return Scaffold(
+          drawer: const DrawerNav(),
+          appBar: const PreferredSize(
+            preferredSize: Size.fromHeight(60),
+            child: Header(),
           ),
-        ),
-      ),
+          bottomNavigationBar: Navegar(
+            onVoltar: () => Navigator.pop(context),
+            onAvancar: () {},
+          ),
+          body: SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const MenuTitle(title: 'Banco de questões', fontSize: 28),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Crie questões novas ou encontre as que já estão no banco.',
+                    style: TextStyle(fontSize: 14, color: Colors.grey.shade700),
+                  ),
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _BigButton(
+                          icon: Icons.search,
+                          label: 'Pesquisar questão',
+                          onTap: _openSearch,
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: _BigButton(
+                          icon: Icons.add_circle_outline,
+                          label: 'Criar questão',
+                          onTap: _openCreate,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 28),
+                  Row(
+                    children: [
+                      const Text(
+                        'Últimas questões',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        '${todas.length} no banco',
+                        style: TextStyle(color: Colors.grey.shade700),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  if (snap.hasError)
+                    Text('Erro ao carregar: ${snap.error}')
+                  else if (snap.connectionState == ConnectionState.waiting)
+                    const Center(child: CircularProgressIndicator())
+                  else if (recentes.isEmpty)
+                    const EmptyState()
+                  else
+                    ...recentes.map(
+                      (q) => Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: QuestionCard(question: q),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

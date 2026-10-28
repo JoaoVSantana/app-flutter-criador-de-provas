@@ -3,7 +3,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/usuario.dart';
 
-//Criação dos atalhos do auth e do firestore
 class UsuarioService {
   final _auth = FirebaseAuth.instance;
   final _db = FirebaseFirestore.instance;
@@ -22,7 +21,6 @@ class UsuarioService {
 
     final uid = cred.user!.uid;
 
-    // monta o model e salva o perfil no Firestore
     final usuario = Usuario(
       uid: uid,
       nome: nome,
@@ -48,5 +46,12 @@ class UsuarioService {
       password: senha,
     );
     return buscar(cred.user!.uid);
+  }
+
+  Stream<Usuario?> observar(String uid) {
+    return _db.collection('usuarios').doc(uid).snapshots().map((doc) {
+      if (!doc.exists) return null;
+      return Usuario.fromMap(doc.id, doc.data()!);
+    });
   }
 }

@@ -4,33 +4,28 @@ import '../../widgets/header.dart';
 import '../../widgets/navegar.dart';
 import '../../widgets/drawernav.dart';
 import 'elem_comuns.dart';
+import '/service/questao_service.dart';
 
-// ---------------------------------------------------------------------------
-// Tela de pesquisa com filtros
-// ---------------------------------------------------------------------------
 class SearchQuestionsPage extends StatefulWidget {
-  final List<Question> questions;
-  final void Function(String id) onDelete;
-
-  const SearchQuestionsPage({
-    super.key,
-    required this.questions,
-    required this.onDelete,
-  });
+  const SearchQuestionsPage({super.key});
 
   @override
   State<SearchQuestionsPage> createState() => _SearchQuestionsPageState();
 }
 
 class _SearchQuestionsPageState extends State<SearchQuestionsPage> {
+  final _service = QuestaoService();
+
+  late final Stream<List<Question>> _stream = _service.observarMinhas();
+
   String _texto = '';
   String? _turma;
   Nivel? _nivel;
   Tipo? _tipo;
   String? _materia;
 
-  List<Question> get _filtradas {
-    return widget.questions.where((q) {
+  List<Question> _filtrar(List<Question> todas) {
+    return todas.where((q) {
       final t = _texto.toLowerCase();
       final okTexto =
           t.isEmpty ||
@@ -62,108 +57,124 @@ class _SearchQuestionsPageState extends State<SearchQuestionsPage> {
         ],
       ),
     );
-    if (ok == true) {
-      widget.onDelete(q.id);
-      setState(() {});
+    if (ok != true) return;
+
+    try {
+      await _service.excluir(q.id);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Erro ao excluir: $e')));
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final lista = _filtradas;
-    return Scaffold(
-      drawer: const DrawerNav(),
-      appBar: const PreferredSize(
-        preferredSize: Size.fromHeight(60),
-        child: Header(),
-      ),
-      bottomNavigationBar: Navegar(
-        onVoltar: () => Navigator.pop(context),
-        onAvancar: () {},
-      ),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const MenuTitle(title: 'Pesquisar questão', fontSize: 26),
-              const SizedBox(height: 14),
-              TextField(
-                onChanged: (v) => setState(() => _texto = v),
-                decoration: InputDecoration(
-                  hintText: 'Buscar por enunciado ou assunto',
-                  prefixIcon: const Icon(Icons.search),
-                  filled: true,
-                  fillColor: kListCard,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 0),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(14),
-                    borderSide: BorderSide.none,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
+    return StreamBuilder<List<Question>>(
+      stream: _stream,
+      builder: (context, snap) {
+        final lista = _filtrar(snap.data ?? []);
+
+        return Scaffold(
+          drawer: const DrawerNav(),
+          appBar: const PreferredSize(
+            preferredSize: Size.fromHeight(60),
+            child: Header(),
+          ),
+          bottomNavigationBar: Navegar(
+            onVoltar: () => Navigator.pop(context),
+            onAvancar: () {},
+          ),
+          body: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _Filter<String>(
-                    icon: Icons.groups_outlined,
-                    allLabel: 'Todas as turmas',
-                    value: _turma,
-                    options: {for (final t in kTurmas) t: t},
-                    onChanged: (v) => setState(() => _turma = v),
+                  const MenuTitle(title: 'Pesquisar questão', fontSize: 26),
+                  const SizedBox(height: 14),
+                  TextField(
+                    onChanged: (v) => setState(() => _texto = v),
+                    decoration: InputDecoration(
+                      hintText: 'Buscar por enunciado ou assunto',
+                      prefixIcon: const Icon(Icons.search),
+                      filled: true,
+                      fillColor: kListCard,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
                   ),
-                  _Filter<String>(
-                    icon: Icons.menu_book_outlined,
-                    allLabel: 'Todas as matérias',
-                    value: _materia,
-                    options: {for (final m in kMaterias) m: m},
-                    onChanged: (v) => setState(() => _materia = v),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _Filter<String>(
+                        icon: Icons.groups_outlined,
+                        allLabel: 'Todas as turmas',
+                        value: _turma,
+                        options: {for (final t in kTurmas) t: t},
+                        onChanged: (v) => setState(() => _turma = v),
+                      ),
+                      _Filter<String>(
+                        icon: Icons.menu_book_outlined,
+                        allLabel: 'Todas as matérias',
+                        value: _materia,
+                        options: {for (final m in kMaterias) m: m},
+                        onChanged: (v) => setState(() => _materia = v),
+                      ),
+                      _Filter<Nivel>(
+                        icon: Icons.signal_cellular_alt,
+                        allLabel: 'Todos os níveis',
+                        value: _nivel,
+                        options: {for (final n in Nivel.values) n: n.label},
+                        onChanged: (v) => setState(() => _nivel = v),
+                      ),
+                      _Filter<Tipo>(
+                        icon: Icons.checklist,
+                        allLabel: 'Todos os tipos',
+                        value: _tipo,
+                        options: {for (final t in Tipo.values) t: t.label},
+                        onChanged: (v) => setState(() => _tipo = v),
+                      ),
+                    ],
                   ),
-                  _Filter<Nivel>(
-                    icon: Icons.signal_cellular_alt,
-                    allLabel: 'Todos os níveis',
-                    value: _nivel,
-                    options: {for (final n in Nivel.values) n: n.label},
-                    onChanged: (v) => setState(() => _nivel = v),
+                  const SizedBox(height: 14),
+                  Text(
+                    '${lista.length} questão(ões) encontrada(s)',
+                    style: TextStyle(color: Colors.grey.shade700),
                   ),
-                  _Filter<Tipo>(
-                    icon: Icons.checklist,
-                    allLabel: 'Todos os tipos',
-                    value: _tipo,
-                    options: {for (final t in Tipo.values) t: t.label},
-                    onChanged: (v) => setState(() => _tipo = v),
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: snap.hasError
+                        ? Text('Erro ao carregar: ${snap.error}')
+                        : snap.connectionState == ConnectionState.waiting
+                        ? const Center(child: CircularProgressIndicator())
+                        : lista.isEmpty
+                        ? const Align(
+                            alignment: Alignment.topCenter,
+                            child: EmptyState(),
+                          )
+                        : ListView.separated(
+                            padding: const EdgeInsets.only(bottom: 24),
+                            itemCount: lista.length,
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(height: 12),
+                            itemBuilder: (_, i) => QuestionCard(
+                              question: lista[i],
+                              onDelete: () => _confirmDelete(lista[i]),
+                            ),
+                          ),
                   ),
                 ],
               ),
-              const SizedBox(height: 14),
-              Text(
-                '${lista.length} questão(ões) encontrada(s)',
-                style: TextStyle(color: Colors.grey.shade700),
-              ),
-              const SizedBox(height: 8),
-              Expanded(
-                child: lista.isEmpty
-                    ? const Align(
-                        alignment: Alignment.topCenter,
-                        child: EmptyState(),
-                      )
-                    : ListView.separated(
-                        padding: const EdgeInsets.only(bottom: 24),
-                        itemCount: lista.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 12),
-                        itemBuilder: (_, i) => QuestionCard(
-                          question: lista[i],
-                          onDelete: () => _confirmDelete(lista[i]),
-                        ),
-                      ),
-              ),
-            ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }

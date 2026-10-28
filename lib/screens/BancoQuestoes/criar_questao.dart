@@ -2,9 +2,6 @@ import 'package:flutter/material.dart';
 
 import 'elem_comuns.dart';
 
-// ---------------------------------------------------------------------------
-// "Tela menor" de criação: etapa 1 (classificação) e etapa 2 (conteúdo)
-// ---------------------------------------------------------------------------
 class CreateQuestionSheet extends StatefulWidget {
   const CreateQuestionSheet({super.key});
 
@@ -16,14 +13,12 @@ class _CreateQuestionSheetState extends State<CreateQuestionSheet> {
   int _step = 0;
   String? _erro;
 
-  // Etapa 1
   String? _materia;
   final _assunto = TextEditingController();
   Nivel? _nivel;
   final Set<String> _turmas = {};
   Tipo? _tipo;
 
-  // Etapa 2
   final _enunciado = TextEditingController();
   final List<TextEditingController> _alts = List.generate(
     4,
@@ -201,7 +196,6 @@ class _CreateQuestionSheetState extends State<CreateQuestionSheet> {
     child: Text(text, style: const TextStyle(fontWeight: FontWeight.w700)),
   );
 
-  // ---- Etapa 1: matéria, assunto, nível, turmas, tipo ----
   Widget _etapa1() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -271,7 +265,6 @@ class _CreateQuestionSheetState extends State<CreateQuestionSheet> {
     );
   }
 
-  // ---- Etapa 2: enunciado + resposta (muda conforme o tipo) ----
   Widget _etapa2() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

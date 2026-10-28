@@ -15,7 +15,6 @@ class QuestaoService {
     'enunciado': q.enunciado,
     'alternativas': q.alternativas,
     'corretas': q.corretas.toList()..sort(),
-    'respostaEsperada': q.respostaEsperada,
   };
 
   Question _fromMap(String id, Map<String, dynamic> m) => Question(
@@ -34,7 +33,6 @@ class QuestaoService {
     enunciado: m['enunciado'] ?? '',
     alternativas: List<String>.from(m['alternativas'] ?? []),
     corretas: List<int>.from(m['corretas'] ?? []).toSet(),
-    respostaEsperada: m['respostaEsperada'] ?? '',
   );
 
   Future<void> criar(Question q) async {

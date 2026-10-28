@@ -8,7 +8,7 @@ const kBg = Color(0xFFFEF7FF);
 
 enum Nivel { baixo, medio, alto }
 
-enum Tipo { multipla, vf, dissertativa }
+enum Tipo { multipla, vf }
 
 extension NivelX on Nivel {
   String get label => switch (this) {
@@ -27,7 +27,6 @@ extension TipoX on Tipo {
   String get label => switch (this) {
     Tipo.multipla => 'Múltipla escolha',
     Tipo.vf => 'Verdadeiro ou falso',
-    Tipo.dissertativa => 'Dissertativa',
   };
 }
 
@@ -41,7 +40,6 @@ class Question {
   final String enunciado;
   final List<String> alternativas;
   final Set<int> corretas;
-  final String respostaEsperada;
 
   const Question({
     required this.id,
@@ -53,7 +51,6 @@ class Question {
     required this.enunciado,
     this.alternativas = const [],
     this.corretas = const {},
-    this.respostaEsperada = '',
   });
 }
 
@@ -207,43 +204,35 @@ class QuestionCard extends StatelessWidget {
               child: Text(q.enunciado, style: const TextStyle(fontSize: 14)),
             ),
             const SizedBox(height: 10),
-            if (q.tipo == Tipo.dissertativa)
-              Text(
-                q.respostaEsperada.isEmpty
-                    ? 'Sem resposta esperada cadastrada.'
-                    : 'Resposta esperada: ${q.respostaEsperada}',
-                style: TextStyle(color: Colors.grey.shade800),
-              )
-            else
-              for (var i = 0; i < q.alternativas.length; i++)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 3),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(
-                        q.corretas.contains(i)
-                            ? Icons.check_circle
-                            : Icons.circle_outlined,
-                        size: 20,
-                        color: q.corretas.contains(i) ? kGreen : Colors.grey,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          q.tipo == Tipo.multipla
-                              ? '${String.fromCharCode(65 + i)}) ${q.alternativas[i]}'
-                              : q.alternativas[i],
-                          style: TextStyle(
-                            fontWeight: q.corretas.contains(i)
-                                ? FontWeight.w700
-                                : FontWeight.w400,
-                          ),
+            for (var i = 0; i < q.alternativas.length; i++)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 3),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      q.corretas.contains(i)
+                          ? Icons.check_circle
+                          : Icons.circle_outlined,
+                      size: 20,
+                      color: q.corretas.contains(i) ? kGreen : Colors.grey,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        q.tipo == Tipo.multipla
+                            ? '${String.fromCharCode(65 + i)}) ${q.alternativas[i]}'
+                            : q.alternativas[i],
+                        style: TextStyle(
+                          fontWeight: q.corretas.contains(i)
+                              ? FontWeight.w700
+                              : FontWeight.w400,
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
+              ),
             if (onDelete != null || onAddToExam != null) ...[
               const SizedBox(height: 8),
               Row(

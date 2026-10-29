@@ -5,12 +5,14 @@ class Aluno {
   final String nome;
   final String email;
   final String turmaID;
+  final String criadoPor;
 
   Aluno({
     required this.id,
     required this.nome,
     required this.email,
     required this.turmaID,
+    required this.criadoPor,
   });
 
   factory Aluno.fromFirestore(DocumentSnapshot doc) {
@@ -20,6 +22,7 @@ class Aluno {
       nome: data['nome'] ?? '',
       email: data['email'] ?? '',
       turmaID: data['turmaID'] ?? '',
+      criadoPor: data['criadoPor'] ?? '',
     );
   }
 
@@ -28,6 +31,7 @@ class Aluno {
       'nome': nome,
       'email': email,
       'turmaID': turmaID,
+      'criadoPor': criadoPor,
     };
   }
 }

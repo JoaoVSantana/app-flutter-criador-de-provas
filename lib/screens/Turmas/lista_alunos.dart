@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // <--- Import necessário para pegar o UID
 import '../../widgets/header.dart';
 import '../../widgets/navegar.dart';
 import '../../widgets/drawernav.dart';
@@ -60,11 +61,15 @@ class _ListaAlunosScreenState extends State<ListaAlunosScreen> {
               style: ElevatedButton.styleFrom(backgroundColor: Colors.green[700]),
               onPressed: () async {
                 if (nomeController.text.isNotEmpty && matriculaController.text.isNotEmpty) {
+                  // Pega o UID do utilizador autenticado no momento da criação
+                  final String? uid = FirebaseAuth.instance.currentUser?.uid;
+
                   final novoAluno = Aluno(
                     id: '',
                     nome: nomeController.text,
                     email: emailController.text,
                     turmaID: widget.turmaId,
+                    criadoPor: uid ?? '', // <--- Passando o UID obrigatório
                   );
                   await _alunoService.adicionarAluno(novoAluno);
                   if (context.mounted) Navigator.pop(context);

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // <--- Import necessário para pegar o UID
 import '../../widgets/header.dart';
 import '../../widgets/navegar.dart';
 import '../../widgets/drawernav.dart';
@@ -164,9 +165,13 @@ class _NovaTurmaModalState extends State<NovaTurmaModal> {
 
   void _salvarTurma() async {
     if (_nomeTurmaController.text.isNotEmpty) {
+      // Pega o UID do usuário autenticado no momento da criação
+      final String? uid = FirebaseAuth.instance.currentUser?.uid;
+
       final novaTurma = Turma(
         id: '',
         nome: _nomeTurmaController.text,
+        criadoPor: uid ?? '', // <--- Passando o UID obrigatório
       );
       await _turmaService.adicionarTurma(novaTurma);
       if (context.mounted) Navigator.pop(context);

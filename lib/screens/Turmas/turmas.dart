@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../../widgets/header.dart';
 import '../../widgets/navegar.dart';
 import '../../widgets/drawernav.dart';
+import 'package:flutter_application_1/models/turma.dart';
+import 'package:flutter_application_1/service/turma_service.dart';
 import 'lista_alunos.dart';
 
 class TurmasScreen extends StatefulWidget {
@@ -12,44 +14,25 @@ class TurmasScreen extends StatefulWidget {
 }
 
 class _TurmasScreenState extends State<TurmasScreen> {
-  final bool usuarioEstaLogado = true; 
+  final bool usuarioEstaLogado = true;
+  final TurmaService _turmaService = TurmaService();
 
-  List<Map<String, dynamic>> turmasMock = [
-    {
-      'nome': '1º Ano A',
-      'alunos': [
-        {'matricula': '2023001', 'nome': 'Ana Silva Costa'},
-        {'matricula': '2023002', 'nome': 'Bruno Gomes Souza'},
-      ]
-    },
-    {
-      'nome': '2º Ano B',
-      'alunos': <Map<String, String>>[] 
-    }
-  ];
-
-  void _removerTurma(int index) {
-    setState(() {
-      turmasMock.removeAt(index);
-    });
-  }
-
-  void _confirmarRemocaoTurma(int index) {
+  void _confirmarRemocaoTurma(Turma turma) {
     showDialog(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
           title: const Text('Confirmar exclusão'),
-          content: Text('Tem certeza que deseja excluir a turma "${turmasMock[index]['nome']}" e todos os seus alunos?'),
+          content: Text('Tem certeza que deseja excluir a turma "${turma.nome}"?'),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context), 
+              onPressed: () => Navigator.pop(context),
               child: const Text('Cancelar', style: TextStyle(color: Colors.grey)),
             ),
             TextButton(
-              onPressed: () {
-                _removerTurma(index); 
-                Navigator.pop(context); 
+              onPressed: () async {
+                await _turmaService.excluirTurma(turma.id);
+                if (context.mounted) Navigator.pop(context);
               },
               child: const Text('Excluir', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
             ),
@@ -64,20 +47,14 @@ class _TurmasScreenState extends State<TurmasScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => NovaTurmaModal(
-        onSalvar: (novaTurma) {
-          setState(() {
-            turmasMock.add(novaTurma);
-          });
-        },
-      ),
+      builder: (context) => const NovaTurmaModal(),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      drawer: const DrawerNav(), 
+      drawer: const DrawerNav(),
       appBar: const PreferredSize(
         preferredSize: Size.fromHeight(60),
         child: Header(),
@@ -86,7 +63,7 @@ class _TurmasScreenState extends State<TurmasScreen> {
         onVoltar: () => Navigator.pop(context),
         onAvancar: () {},
       ),
-      floatingActionButton: usuarioEstaLogado 
+      floatingActionButton: usuarioEstaLogado
           ? FloatingActionButton(
               onPressed: _abrirModalNovaTurma,
               backgroundColor: Colors.green[700],
@@ -96,7 +73,6 @@ class _TurmasScreenState extends State<TurmasScreen> {
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ADICIONADO: Linha com o botão do Menu e o Título
           Row(
             children: [
               Builder(
@@ -104,11 +80,10 @@ class _TurmasScreenState extends State<TurmasScreen> {
                   return IconButton(
                     icon: const Icon(Icons.menu, size: 28),
                     onPressed: () {
-                      // Este comando força o Scaffold a abrir a Navbar
-                      Scaffold.of(context).openDrawer(); 
+                      Scaffold.of(context).openDrawer();
                     },
                   );
-                }
+                },
               ),
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 16.0, horizontal: 8.0),
@@ -120,39 +95,52 @@ class _TurmasScreenState extends State<TurmasScreen> {
             ],
           ),
           Expanded(
-            child: ListView.builder(
-              itemCount: turmasMock.length,
-              itemBuilder: (context, index) {
-                final turma = turmasMock[index];
-                return Card(
-                  margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  child: ListTile(
-                    leading: const Icon(Icons.class_, color: Colors.green),
-                    title: Text(turma['nome'], style: const TextStyle(fontWeight: FontWeight.bold)),
-                    subtitle: Text('${turma['alunos'].length} aluno(s)'),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (usuarioEstaLogado)
-                          IconButton(
-                            icon: const Icon(Icons.delete_outline, color: Colors.red),
-                            onPressed: () => _confirmarRemocaoTurma(index),
-                          ),
-                        const Icon(Icons.arrow_forward_ios, size: 16),
-                      ],
-                    ),
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => ListaAlunosScreen(
-                            turmaNome: turma['nome'],
-                            alunosDaTurma: turma['alunos'], 
-                          ),
+            child: StreamBuilder<List<Turma>>(
+              stream: _turmaService.getTurmas(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                  return const Center(child: Text('Nenhuma turma cadastrada.'));
+                }
+
+                final turmas = snapshot.data!;
+
+                return ListView.builder(
+                  itemCount: turmas.length,
+                  itemBuilder: (context, index) {
+                    final turma = turmas[index];
+                    return Card(
+                      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      child: ListTile(
+                        leading: const Icon(Icons.class_, color: Colors.green),
+                        title: Text(turma.nome, style: const TextStyle(fontWeight: FontWeight.bold)),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (usuarioEstaLogado)
+                              IconButton(
+                                icon: const Icon(Icons.delete_outline, color: Colors.red),
+                                onPressed: () => _confirmarRemocaoTurma(turma),
+                              ),
+                            const Icon(Icons.arrow_forward_ios, size: 16),
+                          ],
                         ),
-                      ).then((_) => setState(() {}));
-                    },
-                  ),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => ListaAlunosScreen(
+                                turmaId: turma.id,
+                                turmaNome: turma.nome,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    );
+                  },
                 );
               },
             ),
@@ -163,11 +151,8 @@ class _TurmasScreenState extends State<TurmasScreen> {
   }
 }
 
-// Modal de Criação de Turma (Mantido igual)
 class NovaTurmaModal extends StatefulWidget {
-  final Function(Map<String, dynamic>) onSalvar;
-
-  const NovaTurmaModal({super.key, required this.onSalvar});
+  const NovaTurmaModal({super.key});
 
   @override
   State<NovaTurmaModal> createState() => _NovaTurmaModalState();
@@ -175,31 +160,16 @@ class NovaTurmaModal extends StatefulWidget {
 
 class _NovaTurmaModalState extends State<NovaTurmaModal> {
   final TextEditingController _nomeTurmaController = TextEditingController();
-  final TextEditingController _nomeAlunoController = TextEditingController();
-  final TextEditingController _matriculaController = TextEditingController();
+  final TurmaService _turmaService = TurmaService();
 
-  List<Map<String, String>> alunosAdicionados = [];
-
-  void _adicionarAlunoLista() {
-    if (_nomeAlunoController.text.isNotEmpty && _matriculaController.text.isNotEmpty) {
-      setState(() {
-        alunosAdicionados.add({
-          'nome': _nomeAlunoController.text,
-          'matricula': _matriculaController.text,
-        });
-        _nomeAlunoController.clear();
-        _matriculaController.clear();
-      });
-    }
-  }
-
-  void _salvarTurma() {
+  void _salvarTurma() async {
     if (_nomeTurmaController.text.isNotEmpty) {
-      widget.onSalvar({
-        'nome': _nomeTurmaController.text,
-        'alunos': alunosAdicionados,
-      });
-      Navigator.pop(context);
+      final novaTurma = Turma(
+        id: '',
+        nome: _nomeTurmaController.text,
+      );
+      await _turmaService.adicionarTurma(novaTurma);
+      if (context.mounted) Navigator.pop(context);
     }
   }
 
@@ -214,7 +184,7 @@ class _NovaTurmaModalState extends State<NovaTurmaModal> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       child: Column(
-        mainAxisSize: MainAxisSize.min, 
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const Text('Criar Nova Turma', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
@@ -227,57 +197,10 @@ class _NovaTurmaModalState extends State<NovaTurmaModal> {
             ),
           ),
           const SizedBox(height: 20),
-          const Text('Adicionar Alunos', style: TextStyle(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                flex: 2,
-                child: TextField(
-                  controller: _nomeAlunoController,
-                  decoration: const InputDecoration(labelText: 'Nome', isDense: true),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                flex: 1,
-                child: TextField(
-                  controller: _matriculaController,
-                  decoration: const InputDecoration(labelText: 'Matrícula', isDense: true),
-                ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.add_circle, color: Colors.green, size: 32),
-                onPressed: _adicionarAlunoLista,
-              )
-            ],
-          ),
-          const SizedBox(height: 16),
-          if (alunosAdicionados.isNotEmpty)
-            Container(
-              constraints: const BoxConstraints(maxHeight: 150),
-              child: ListView.builder(
-                shrinkWrap: true,
-                itemCount: alunosAdicionados.length,
-                itemBuilder: (context, index) {
-                  final al = alunosAdicionados[index];
-                  return ListTile(
-                    dense: true,
-                    title: Text(al['nome']!),
-                    subtitle: Text(al['matricula']!),
-                    trailing: IconButton(
-                      icon: const Icon(Icons.remove_circle_outline, color: Colors.red, size: 20),
-                      onPressed: () => setState(() => alunosAdicionados.removeAt(index)), 
-                    ),
-                  );
-                },
-              ),
-            ),
-          const SizedBox(height: 16),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.green[700],
-              padding: const EdgeInsets.symmetric(vertical: 16)
+              padding: const EdgeInsets.symmetric(vertical: 16),
             ),
             onPressed: _salvarTurma,
             child: const Text('Salvar Turma', style: TextStyle(color: Colors.white, fontSize: 16)),

@@ -2,13 +2,19 @@ import 'package:flutter/material.dart';
 import '../../widgets/header.dart';
 import '../../widgets/navegar.dart';
 import '../../widgets/drawernav.dart';
+import 'package:flutter_application_1/models/aluno.dart';
+import 'package:flutter_application_1/service/aluno_service.dart';
 import 'folha_resposta.dart';
 
 class ListaAlunosScreen extends StatefulWidget {
+  final String turmaId;
   final String turmaNome;
-  final List<dynamic> alunosDaTurma;
 
-  const ListaAlunosScreen({super.key, required this.turmaNome, required this.alunosDaTurma});
+  const ListaAlunosScreen({
+    super.key,
+    required this.turmaId,
+    required this.turmaNome,
+  });
 
   @override
   State<ListaAlunosScreen> createState() => _ListaAlunosScreenState();
@@ -16,38 +22,78 @@ class ListaAlunosScreen extends StatefulWidget {
 
 class _ListaAlunosScreenState extends State<ListaAlunosScreen> {
   final bool usuarioEstaLogado = true;
+  final AlunoService _alunoService = AlunoService();
 
-  void _adicionarAlunoRapido() {
-    setState(() {
-      widget.alunosDaTurma.add({
-        'matricula': '202600${widget.alunosDaTurma.length + 1}',
-        'nome': 'Novo Aluno Teste',
-      });
-    });
+  void _adicionarAlunoModal() {
+    final nomeController = TextEditingController();
+    final matriculaController = TextEditingController();
+    final emailController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Adicionar Aluno'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nomeController,
+                decoration: const InputDecoration(labelText: 'Nome do Aluno'),
+              ),
+              TextField(
+                controller: emailController,
+                decoration: const InputDecoration(labelText: 'E-mail'),
+              ),
+              TextField(
+                controller: matriculaController,
+                decoration: const InputDecoration(labelText: 'Matrícula'),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancelar', style: TextStyle(color: Colors.grey)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.green[700]),
+              onPressed: () async {
+                if (nomeController.text.isNotEmpty && matriculaController.text.isNotEmpty) {
+                  final novoAluno = Aluno(
+                    id: '',
+                    nome: nomeController.text,
+                    email: emailController.text,
+                    turmaID: widget.turmaId,
+                  );
+                  await _alunoService.adicionarAluno(novoAluno);
+                  if (context.mounted) Navigator.pop(context);
+                }
+              },
+              child: const Text('Salvar', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        );
+      },
+    );
   }
 
-  void _removerAluno(int index) {
-    setState(() {
-      widget.alunosDaTurma.removeAt(index);
-    });
-  }
-
-  void _confirmarRemocaoAluno(int index) {
+  void _confirmarRemocaoAluno(Aluno aluno) {
     showDialog(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
           title: const Text('Confirmar exclusão'),
-          content: Text('Tem certeza que deseja excluir o aluno "${widget.alunosDaTurma[index]['nome']}"?'),
+          content: Text('Tem certeza que deseja excluir o aluno "${aluno.nome}"?'),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context), 
+              onPressed: () => Navigator.pop(context),
               child: const Text('Cancelar', style: TextStyle(color: Colors.grey)),
             ),
             TextButton(
-              onPressed: () {
-                _removerAluno(index); 
-                Navigator.pop(context); 
+              onPressed: () async {
+                await _alunoService.excluirAluno(aluno.id);
+                if (context.mounted) Navigator.pop(context);
               },
               child: const Text('Excluir', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
             ),
@@ -60,7 +106,7 @@ class _ListaAlunosScreenState extends State<ListaAlunosScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      drawer: const DrawerNav(), 
+      drawer: const DrawerNav(),
       appBar: const PreferredSize(
         preferredSize: Size.fromHeight(60),
         child: Header(),
@@ -69,9 +115,9 @@ class _ListaAlunosScreenState extends State<ListaAlunosScreen> {
         onVoltar: () => Navigator.pop(context),
         onAvancar: () {},
       ),
-      floatingActionButton: usuarioEstaLogado 
+      floatingActionButton: usuarioEstaLogado
           ? FloatingActionButton(
-              onPressed: _adicionarAlunoRapido,
+              onPressed: _adicionarAlunoModal,
               backgroundColor: Colors.green[700],
               child: const Icon(Icons.person_add, color: Colors.white),
             )
@@ -92,26 +138,36 @@ class _ListaAlunosScreenState extends State<ListaAlunosScreen> {
             ],
           ),
           Expanded(
-            child: widget.alunosDaTurma.isEmpty 
-              ? const Center(child: Text('Nenhum aluno nesta turma ainda.'))
-              : ListView.builder(
-                  itemCount: widget.alunosDaTurma.length,
+            child: StreamBuilder<List<Aluno>>(
+              stream: _alunoService.getAlunosPorTurma(widget.turmaId),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                  return const Center(child: Text('Nenhum aluno nesta turma ainda.'));
+                }
+
+                final alunos = snapshot.data!;
+
+                return ListView.builder(
+                  itemCount: alunos.length,
                   itemBuilder: (context, index) {
-                    final aluno = widget.alunosDaTurma[index];
+                    final aluno = alunos[index];
                     return ListTile(
                       leading: CircleAvatar(
                         backgroundColor: Colors.green[100],
-                        child: Text(aluno['nome']![0], style: const TextStyle(color: Colors.green)),
+                        child: Text(aluno.nome.isNotEmpty ? aluno.nome[0] : 'A', style: const TextStyle(color: Colors.green)),
                       ),
-                      title: Text(aluno['nome']!),
-                      subtitle: Text('Matrícula: ${aluno['matricula']}'),
+                      title: Text(aluno.nome),
+                      subtitle: Text('E-mail: ${aluno.email}'),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           if (usuarioEstaLogado)
                             IconButton(
                               icon: const Icon(Icons.delete_outline, color: Colors.red),
-                              onPressed: () => _confirmarRemocaoAluno(index),
+                              onPressed: () => _confirmarRemocaoAluno(aluno),
                             ),
                           ElevatedButton.icon(
                             style: ElevatedButton.styleFrom(backgroundColor: Colors.green[700]),
@@ -122,8 +178,8 @@ class _ListaAlunosScreenState extends State<ListaAlunosScreen> {
                                 context,
                                 MaterialPageRoute(
                                   builder: (context) => FolhaRespostaScreen(
-                                    nomeAluno: aluno['nome']!,
-                                    matricula: aluno['matricula']!,
+                                    nomeAluno: aluno.nome,
+                                    matricula: aluno.email,
                                     turma: widget.turmaNome,
                                   ),
                                 ),
@@ -134,6 +190,8 @@ class _ListaAlunosScreenState extends State<ListaAlunosScreen> {
                       ),
                     );
                   },
+                );
+              },
             ),
           ),
         ],

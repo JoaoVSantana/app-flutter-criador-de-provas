@@ -1,38 +1,48 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+
 import '../models/aluno.dart';
 
 class AlunoService {
-  final CollectionReference _alunosCollection =
-      FirebaseFirestore.instance.collection('alunos');
-  final FirebaseAuth _auth = FirebaseAuth.instance;
+  CollectionReference<Map<String, dynamic>> _col(String turmaId) =>
+      FirebaseFirestore.instance
+          .collection('turmas')
+          .doc(turmaId)
+          .collection('alunos');
 
   Stream<List<Aluno>> getAlunosPorTurma(String turmaId) {
-    final String? uid = _auth.currentUser?.uid;
-    if (uid == null) return Stream.value([]);
+    if (FirebaseAuth.instance.currentUser == null) return Stream.value([]);
 
-    return _alunosCollection
-        .where('turmaID', isEqualTo: turmaId)
-        .where('criadoPor', isEqualTo: uid)
-        .snapshots()
-        .map((snapshot) {
-      return snapshot.docs.map((doc) => Aluno.fromFirestore(doc)).toList();
+    return _col(turmaId).snapshots().map((snapshot) {
+      final lista = snapshot.docs.map((d) => Aluno.fromFirestore(d)).toList()
+        ..sort((a, b) => a.nome.toLowerCase().compareTo(b.nome.toLowerCase()));
+      return lista;
     });
   }
 
-  Future<void> adicionarAluno(Aluno aluno) async {
-    final String? uid = _auth.currentUser?.uid;
-    if (uid == null) throw Exception('Usuário não autenticado');
-
-    await _alunosCollection.add({
-      'nome': aluno.nome,
-      'email': aluno.email,
-      'turmaID': aluno.turmaID,
-      'criadoPor': uid,
-    });
+  Future<void> adicionarAluno({
+    required String turmaId,
+    required String nome,
+  }) async {
+    if (FirebaseAuth.instance.currentUser == null) {
+      throw Exception('Usuário não autenticado');
+    }
+    await _col(turmaId)
+        .add({'nome': nome.trim(), 'criadoEm': FieldValue.serverTimestamp()});
   }
 
-  Future<void> excluirAluno(String id) async {
-    await _alunosCollection.doc(id).delete();
+  Future<void> renomearAluno({
+    required String turmaId,
+    required String alunoId,
+    required String nome,
+  }) {
+    return _col(turmaId).doc(alunoId).update({'nome': nome.trim()});
+  }
+
+  Future<void> excluirAluno({
+    required String turmaId,
+    required String alunoId,
+  }) {
+    return _col(turmaId).doc(alunoId).delete();
   }
 }

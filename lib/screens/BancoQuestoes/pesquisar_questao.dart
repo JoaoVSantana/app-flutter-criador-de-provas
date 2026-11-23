@@ -5,6 +5,7 @@ import '../../widgets/navegar.dart';
 import '../../widgets/drawernav.dart';
 import 'elem_comuns.dart';
 import '/service/questao_service.dart';
+import 'acoes_questao.dart';
 
 class SearchQuestionsPage extends StatefulWidget {
   const SearchQuestionsPage({super.key});
@@ -19,9 +20,7 @@ class _SearchQuestionsPageState extends State<SearchQuestionsPage> {
   late final Stream<List<Question>> _stream = _service.observarMinhas();
 
   String _texto = '';
-  String? _turma;
   Nivel? _nivel;
-  Tipo? _tipo;
   String? _materia;
 
   List<Question> _filtrar(List<Question> todas) {
@@ -30,42 +29,12 @@ class _SearchQuestionsPageState extends State<SearchQuestionsPage> {
       final okTexto =
           t.isEmpty ||
           q.enunciado.toLowerCase().contains(t) ||
-          q.assunto.toLowerCase().contains(t);
-      final okTurma = _turma == null || q.turmas.contains(_turma);
+          q.assunto.toLowerCase().contains(t) ||
+          q.codigo.toLowerCase().contains(t);
       final okNivel = _nivel == null || q.nivel == _nivel;
-      final okTipo = _tipo == null || q.tipo == _tipo;
       final okMateria = _materia == null || q.materia == _materia;
-      return okTexto && okTurma && okNivel && okTipo && okMateria;
+      return okTexto && okNivel && okMateria;
     }).toList();
-  }
-
-  Future<void> _confirmDelete(Question q) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Excluir questão?'),
-        content: const Text('Essa ação não pode ser desfeita.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancelar'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Excluir', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
-    if (ok != true) return;
-
-    try {
-      await _service.excluir(q.id);
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Erro ao excluir: $e')));
-    }
   }
 
   @override
@@ -73,7 +42,9 @@ class _SearchQuestionsPageState extends State<SearchQuestionsPage> {
     return StreamBuilder<List<Question>>(
       stream: _stream,
       builder: (context, snap) {
-        final lista = _filtrar(snap.data ?? []);
+        final todas = snap.data ?? [];
+        final lista = _filtrar(todas);
+        final materias = todas.map((q) => q.materia).toSet().toList()..sort();
 
         return Scaffold(
           drawer: const DrawerNav(),
@@ -113,17 +84,10 @@ class _SearchQuestionsPageState extends State<SearchQuestionsPage> {
                     runSpacing: 8,
                     children: [
                       _Filter<String>(
-                        icon: Icons.groups_outlined,
-                        allLabel: 'Todas as turmas',
-                        value: _turma,
-                        options: {for (final t in kTurmas) t: t},
-                        onChanged: (v) => setState(() => _turma = v),
-                      ),
-                      _Filter<String>(
                         icon: Icons.menu_book_outlined,
                         allLabel: 'Todas as matérias',
                         value: _materia,
-                        options: {for (final m in kMaterias) m: m},
+                        options: {for (final m in materias) m: m},
                         onChanged: (v) => setState(() => _materia = v),
                       ),
                       _Filter<Nivel>(
@@ -132,13 +96,6 @@ class _SearchQuestionsPageState extends State<SearchQuestionsPage> {
                         value: _nivel,
                         options: {for (final n in Nivel.values) n: n.label},
                         onChanged: (v) => setState(() => _nivel = v),
-                      ),
-                      _Filter<Tipo>(
-                        icon: Icons.checklist,
-                        allLabel: 'Todos os tipos',
-                        value: _tipo,
-                        options: {for (final t in Tipo.values) t: t.label},
-                        onChanged: (v) => setState(() => _tipo = v),
                       ),
                     ],
                   ),
@@ -165,7 +122,8 @@ class _SearchQuestionsPageState extends State<SearchQuestionsPage> {
                                 const SizedBox(height: 12),
                             itemBuilder: (_, i) => QuestionCard(
                               question: lista[i],
-                              onDelete: () => _confirmDelete(lista[i]),
+                              onEdit: () => editarQuestao(context, lista[i]),
+                              onDelete: () => excluirQuestao(context, lista[i]),
                             ),
                           ),
                   ),

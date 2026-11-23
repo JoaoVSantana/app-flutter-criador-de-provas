@@ -1,5 +1,5 @@
-// lib/app.dart
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import '../screens/Home/home.dart';
 import '../screens/BancoQuestoes/questoes.dart';
@@ -19,15 +19,46 @@ class AppRoutes {
   static const entrar = '/entrar';
 }
 
+// Verifica se existe um usuário autenticado
+class AuthGate extends StatelessWidget {
+  const AuthGate({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<User?>(
+      stream: FirebaseAuth.instance.authStateChanges(),
+      builder: (context, snapshot) {
+        print('AUTH GATE: ${snapshot.connectionState}');
+        print('USUÁRIO: ${snapshot.data?.uid}');
+        print('TEM DADOS: ${snapshot.hasData}');
+
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        if (snapshot.hasData) {
+          print('DIRECIONANDO PARA HOME');
+          return const Home();
+        }
+
+        print('DIRECIONANDO PARA LOGIN');
+        return const Entrar();
+      },
+    );
+  }
+}
+
 class Routes extends StatelessWidget {
   const Routes({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      initialRoute: AppRoutes.entrar,
+      initialRoute: AppRoutes.home,
       routes: {
-        AppRoutes.home: (context) => Home(),
+        AppRoutes.home: (context) => const AuthGate(),
         AppRoutes.listaQuestoes: (context) => const ListaQuestoes(),
         AppRoutes.criarProva: (context) => const Prova(),
         AppRoutes.correcao: (context) => Corrigir(),

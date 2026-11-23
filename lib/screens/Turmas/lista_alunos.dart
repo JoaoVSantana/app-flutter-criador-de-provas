@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart'; // <--- Import necessário para pegar o UID
+
 import '../../widgets/header.dart';
 import '../../widgets/navegar.dart';
 import '../../widgets/drawernav.dart';
+
 import 'package:flutter_application_1/models/aluno.dart';
 import 'package:flutter_application_1/service/aluno_service.dart';
-import 'folha_resposta.dart';
+
+import 'dialog_nome.dart';
 
 class ListaAlunosScreen extends StatefulWidget {
   final String turmaId;
@@ -22,62 +24,31 @@ class ListaAlunosScreen extends StatefulWidget {
 }
 
 class _ListaAlunosScreenState extends State<ListaAlunosScreen> {
-  final bool usuarioEstaLogado = true;
   final AlunoService _alunoService = AlunoService();
 
-  void _adicionarAlunoModal() {
-    final nomeController = TextEditingController();
-    final matriculaController = TextEditingController();
-    final emailController = TextEditingController();
+  void _novoAluno() {
+    mostrarDialogNome(
+      context,
+      titulo: 'Novo aluno',
+      rotulo: 'Nome do aluno',
+      onSalvar: (nome) async {
+        await _alunoService.adicionarAluno(turmaId: widget.turmaId, nome: nome);
+        return null;
+      },
+    );
+  }
 
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Adicionar Aluno'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nomeController,
-                decoration: const InputDecoration(labelText: 'Nome do Aluno'),
-              ),
-              TextField(
-                controller: emailController,
-                decoration: const InputDecoration(labelText: 'E-mail'),
-              ),
-              TextField(
-                controller: matriculaController,
-                decoration: const InputDecoration(labelText: 'Matrícula'),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancelar', style: TextStyle(color: Colors.grey)),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.green[700]),
-              onPressed: () async {
-                if (nomeController.text.isNotEmpty && matriculaController.text.isNotEmpty) {
-                  // Pega o UID do utilizador autenticado no momento da criação
-                  final String? uid = FirebaseAuth.instance.currentUser?.uid;
-
-                  final novoAluno = Aluno(
-                    id: '',
-                    nome: nomeController.text,
-                    email: emailController.text,
-                    turmaID: widget.turmaId,
-                    criadoPor: uid ?? '', // <--- Passando o UID obrigatório
-                  );
-                  await _alunoService.adicionarAluno(novoAluno);
-                  if (context.mounted) Navigator.pop(context);
-                }
-              },
-              child: const Text('Salvar', style: TextStyle(color: Colors.white)),
-            ),
-          ],
+  void _renomearAluno(Aluno aluno) {
+    mostrarDialogNome(
+      context,
+      titulo: 'Editar aluno',
+      rotulo: 'Nome do aluno',
+      inicial: aluno.nome,
+      onSalvar: (nome) async {
+        await _alunoService.renomearAluno(
+          turmaId: widget.turmaId,
+          alunoId: aluno.id,
+          nome: nome,
         );
       },
     );
@@ -86,25 +57,36 @@ class _ListaAlunosScreenState extends State<ListaAlunosScreen> {
   void _confirmarRemocaoAluno(Aluno aluno) {
     showDialog(
       context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Confirmar exclusão'),
-          content: Text('Tem certeza que deseja excluir o aluno "${aluno.nome}"?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancelar', style: TextStyle(color: Colors.grey)),
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Excluir aluno?'),
+        content: Text('Tem certeza que deseja excluir "${aluno.nome}"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancelar', style: TextStyle(color: Colors.grey)),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(dialogContext);
+              try {
+                await _alunoService.excluirAluno(
+                  turmaId: widget.turmaId,
+                  alunoId: aluno.id,
+                );
+              } catch (e) {
+                if (!mounted) return;
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(SnackBar(content: Text('Erro ao excluir: $e')));
+              }
+            },
+            child: const Text(
+              'Excluir',
+              style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
             ),
-            TextButton(
-              onPressed: () async {
-                await _alunoService.excluirAluno(aluno.id);
-                if (context.mounted) Navigator.pop(context);
-              },
-              child: const Text('Excluir', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-            ),
-          ],
-        );
-      },
+          ),
+        ],
+      ),
     );
   }
 
@@ -120,27 +102,26 @@ class _ListaAlunosScreenState extends State<ListaAlunosScreen> {
         onVoltar: () => Navigator.pop(context),
         onAvancar: () {},
       ),
-      floatingActionButton: usuarioEstaLogado
-          ? FloatingActionButton(
-              onPressed: _adicionarAlunoModal,
-              backgroundColor: Colors.green[700],
-              child: const Icon(Icons.person_add, color: Colors.white),
-            )
-          : null,
+      floatingActionButton: FloatingActionButton(
+        onPressed: _novoAluno,
+        backgroundColor: Colors.green[700],
+        child: const Icon(Icons.person_add, color: Colors.white),
+      ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              IconButton(
-                icon: const Icon(Icons.arrow_back),
-                onPressed: () => Navigator.pop(context),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: Text(
+              'Alunos - ${widget.turmaNome}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Colors.black87,
               ),
-              Text(
-                'Alunos - ${widget.turmaNome}',
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-            ],
+            ),
           ),
           Expanded(
             child: StreamBuilder<List<Aluno>>(
@@ -150,7 +131,9 @@ class _ListaAlunosScreenState extends State<ListaAlunosScreen> {
                   return const Center(child: CircularProgressIndicator());
                 }
                 if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                  return const Center(child: Text('Nenhum aluno nesta turma ainda.'));
+                  return const Center(
+                    child: Text('Nenhum aluno nesta turma ainda.'),
+                  );
                 }
 
                 final alunos = snapshot.data!;
@@ -160,36 +143,42 @@ class _ListaAlunosScreenState extends State<ListaAlunosScreen> {
                   itemBuilder: (context, index) {
                     final aluno = alunos[index];
                     return ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: Colors.green[100],
-                        child: Text(aluno.nome.isNotEmpty ? aluno.nome[0] : 'A', style: const TextStyle(color: Colors.green)),
+                      leading: Icon(
+                        Icons.person_outline,
+                        color: Colors.green[700],
+                        size: 28,
                       ),
                       title: Text(aluno.nome),
-                      subtitle: Text('E-mail: ${aluno.email}'),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (usuarioEstaLogado)
-                            IconButton(
-                              icon: const Icon(Icons.delete_outline, color: Colors.red),
-                              onPressed: () => _confirmarRemocaoAluno(aluno),
+                      trailing: PopupMenuButton<String>(
+                        onSelected: (v) {
+                          if (v == 'editar') {
+                            _renomearAluno(aluno);
+                          } else {
+                            _confirmarRemocaoAluno(aluno);
+                          }
+                        },
+                        itemBuilder: (_) => const [
+                          PopupMenuItem(
+                            value: 'editar',
+                            child: ListTile(
+                              leading: Icon(Icons.edit_outlined),
+                              title: Text('Editar nome'),
+                              contentPadding: EdgeInsets.zero,
                             ),
-                          ElevatedButton.icon(
-                            style: ElevatedButton.styleFrom(backgroundColor: Colors.green[700]),
-                            icon: const Icon(Icons.qr_code, size: 18, color: Colors.white),
-                            label: const Text('Folha', style: TextStyle(color: Colors.white)),
-                            onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => FolhaRespostaScreen(
-                                    nomeAluno: aluno.nome,
-                                    matricula: aluno.email,
-                                    turma: widget.turmaNome,
-                                  ),
-                                ),
-                              );
-                            },
+                          ),
+                          PopupMenuItem(
+                            value: 'excluir',
+                            child: ListTile(
+                              leading: Icon(
+                                Icons.delete_outline,
+                                color: Colors.red,
+                              ),
+                              title: Text(
+                                'Excluir',
+                                style: TextStyle(color: Colors.red),
+                              ),
+                              contentPadding: EdgeInsets.zero,
+                            ),
                           ),
                         ],
                       ),

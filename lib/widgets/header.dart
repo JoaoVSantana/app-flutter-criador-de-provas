@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
-// MANTENHA os imports abaixo como já estão no seu projeto (caminhos ajustados)
 import '../../Routes/routes.dart';
 import '../models/usuario.dart';
 import '../service/usuario_service.dart';
@@ -39,15 +38,6 @@ class _HeaderState extends State<Header> {
     if (sair != true) return;
 
     await FirebaseAuth.instance.signOut();
-    if (!mounted) return;
-
-    // Mantém só a primeira tela da pilha e abre o login por cima,
-    // assim as telas do usuário anterior deixam de existir
-    Navigator.pushNamedAndRemoveUntil(
-      context,
-      AppRoutes.entrar,
-      (route) => route.isFirst,
-    );
   }
 
   @override

@@ -6,11 +6,9 @@ import '../../widgets/drawernav.dart';
 import 'elem_comuns.dart';
 import 'criar_questao.dart';
 import 'pesquisar_questao.dart';
-import '/service/questao_service.dart'; // AJUSTE o caminho (Ctrl+. corrige)
+import '/service/questao_service.dart';
+import 'acoes_questao.dart';
 
-// ---------------------------------------------------------------------------
-// Tela principal do Banco de Questões
-// ---------------------------------------------------------------------------
 class ListaQuestoes extends StatefulWidget {
   const ListaQuestoes({super.key});
 
@@ -36,12 +34,11 @@ class _ListaQuestoesState extends State<ListaQuestoes> {
       builder: (_) => const CreateQuestionSheet(),
     );
     if (q == null || !mounted) return;
-
     try {
-      await _service.criar(q);
+      final codigo = await _service.criar(q);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Questão criada com sucesso!')),
+        SnackBar(content: Text('Questão $codigo criada com sucesso!')),
       );
     } catch (e) {
       if (!mounted) return;
@@ -136,7 +133,11 @@ class _ListaQuestoesState extends State<ListaQuestoes> {
                     ...recentes.map(
                       (q) => Padding(
                         padding: const EdgeInsets.only(bottom: 12),
-                        child: QuestionCard(question: q),
+                        child: QuestionCard(
+                          question: q,
+                          onEdit: () => editarQuestao(context, q),
+                          onDelete: () => excluirQuestao(context, q),
+                        ),
                       ),
                     ),
                 ],

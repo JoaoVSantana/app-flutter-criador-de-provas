@@ -2,7 +2,6 @@ import 'dart:math';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-/// Cópia da questão no momento em que entrou na prova.
 class ProvaQuestao {
   final String questaoId;
   final String codigo;
@@ -43,8 +42,6 @@ class ProvaQuestao {
   );
 }
 
-/// Uma questão dentro de uma versão: qual questão (posição na lista da prova)
-/// e em que ordem as alternativas aparecem.
 class ItemVersao {
   final int q;
   final List<int> alts;
@@ -59,7 +56,6 @@ class ItemVersao {
   );
 }
 
-/// Questão pronta para mostrar na tela (já na ordem da versão).
 class QuestaoMontada {
   final String enunciado;
   final List<String> alternativas;
@@ -72,7 +68,6 @@ class QuestaoMontada {
   });
 }
 
-/// Prévia na ordem em que o professor montou, sem embaralhar.
 List<QuestaoMontada> montarOriginal(List<ProvaQuestao> questoes) => questoes
     .map(
       (q) => QuestaoMontada(
@@ -100,6 +95,10 @@ class VersaoProva {
     }).toList();
   }
 
+  /// Letra correta de cada questão (0 = A, 1 = B...), na ordem desta versão.
+  List<int> gabarito(List<ProvaQuestao> questoes) =>
+      montar(questoes).map((m) => m.correta).toList();
+
   Map<String, dynamic> toMap(List<ProvaQuestao> questoes) => {
     'numero': numero,
     'itens': itens.map((i) => i.toMap()).toList(),
@@ -117,9 +116,6 @@ class VersaoProva {
 String _assinatura(List<ItemVersao> itens) =>
     itens.map((i) => '${i.q}:${i.alts.join(",")}').join('|');
 
-/// A versão 1 é a ordem do professor. As demais embaralham a ordem das
-/// questões e das alternativas, sem repetir nenhuma. Se não houver
-/// combinações suficientes, devolve menos versões do que o pedido.
 List<VersaoProva> gerarVersoes(List<ProvaQuestao> questoes, int quantidade) {
   final rnd = Random();
   final versoes = <VersaoProva>[];
@@ -154,9 +150,17 @@ List<VersaoProva> gerarVersoes(List<ProvaQuestao> questoes, int quantidade) {
   return versoes;
 }
 
+String formatarData(DateTime? d) {
+  if (d == null) return '';
+  final dia = d.day.toString().padLeft(2, '0');
+  final mes = d.month.toString().padLeft(2, '0');
+  return '$dia/$mes/${d.year}';
+}
+
 class ProvaSalva {
   final String id;
   final String titulo;
+  final String criadoPorNome;
   final List<ProvaQuestao> questoes;
   final List<VersaoProva> versoes;
   final DateTime? criadoEm;
@@ -164,6 +168,7 @@ class ProvaSalva {
   const ProvaSalva({
     required this.id,
     required this.titulo,
+    this.criadoPorNome = '',
     required this.questoes,
     required this.versoes,
     this.criadoEm,
@@ -175,6 +180,7 @@ class ProvaSalva {
     return ProvaSalva(
       id: doc.id,
       titulo: data['titulo'] ?? '',
+      criadoPorNome: data['criadoPorNome'] ?? '',
       questoes: ((data['questoes'] as List?) ?? [])
           .map((e) => ProvaQuestao.fromMap(Map<String, dynamic>.from(e as Map)))
           .toList(),
@@ -191,28 +197,44 @@ class ProvaSalva {
   );
 }
 
-/// Ligação entre uma prova, uma versão e um aluno (o "versao_aluno").
-class VinculoProva {
-  final String id; // provaId_alunoId
+/// A folha de um aluno numa prova: versão, código (QR) e gabarito.
+class FolhaAluno {
   final String alunoId;
   final String alunoNome;
+  final String turmaId;
   final String turmaNome;
   final int versao;
+  final String codigo;
+  final List<int> gabarito;
+  final String criadoPorNome;
+  final DateTime? criadoEm;
 
-  const VinculoProva({
-    required this.id,
+  const FolhaAluno({
     required this.alunoId,
     required this.alunoNome,
+    required this.turmaId,
     required this.turmaNome,
     required this.versao,
+    required this.codigo,
+    required this.gabarito,
+    this.criadoPorNome = '',
+    this.criadoEm,
   });
 
-  factory VinculoProva.fromMap(String id, Map<String, dynamic> m) =>
-      VinculoProva(
-        id: id,
-        alunoId: m['alunoId'] ?? '',
-        alunoNome: m['alunoNome'] ?? '',
-        turmaNome: m['turmaNome'] ?? '',
-        versao: ((m['versao'] ?? 1) as num).toInt(),
-      );
+  factory FolhaAluno.fromMap(String alunoId, Map<String, dynamic> m) {
+    final ts = m['criadoEm'];
+    return FolhaAluno(
+      alunoId: alunoId,
+      alunoNome: m['alunoNome'] ?? '',
+      turmaId: m['turmaId'] ?? '',
+      turmaNome: m['turmaNome'] ?? '',
+      versao: ((m['versao'] ?? 1) as num).toInt(),
+      codigo: m['codigo'] ?? '',
+      gabarito: ((m['gabarito'] as List?) ?? [])
+          .map((e) => (e as num).toInt())
+          .toList(),
+      criadoPorNome: m['criadoPorNome'] ?? '',
+      criadoEm: ts is Timestamp ? ts.toDate() : null,
+    );
+  }
 }

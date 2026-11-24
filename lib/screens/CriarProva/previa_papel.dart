@@ -1,17 +1,27 @@
 import 'package:flutter/material.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../models/provas.dart';
 
+/// Mostra a prova como ela ficaria no papel.
 class PreviaPapel extends StatelessWidget {
   final String titulo;
   final String? subtitulo;
   final List<QuestaoMontada> itens;
+  final String? nomeAluno;
+  final String? turmaNome;
+
+  /// Quando informado, mostra o QR code e o código no fim da prova.
+  final String? codigo;
 
   const PreviaPapel({
     super.key,
     required this.titulo,
     required this.itens,
     this.subtitulo,
+    this.nomeAluno,
+    this.turmaNome,
+    this.codigo,
   });
 
   @override
@@ -50,9 +60,11 @@ class PreviaPapel extends StatelessWidget {
               ),
             ),
           const SizedBox(height: 12),
-          const Text(
-            'Nome: ____________________   Turma: ______   Data: ___/___/___',
-            style: TextStyle(fontSize: 12, color: preto),
+          Text(
+            nomeAluno == null
+                ? 'Nome: ____________________   Turma: ______   Data: ___/___/___'
+                : 'Nome: $nomeAluno   Turma: ${turmaNome ?? ''}   Data: ___/___/___',
+            style: const TextStyle(fontSize: 12, color: preto),
           ),
           const Divider(height: 24, color: Colors.black87),
           if (itens.isEmpty)
@@ -85,6 +97,37 @@ class PreviaPapel extends StatelessWidget {
                 ],
               ),
             ),
+          if (codigo != null) ...[
+            const Divider(height: 24, color: Colors.black87),
+            Center(
+              child: Column(
+                children: [
+                  QrImageView(
+                    data: codigo!,
+                    version: QrVersions.auto,
+                    size: 140,
+                    backgroundColor: Colors.white,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    codigo!,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 2,
+                      color: preto,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Se a câmera não ler o QR code, digite este código.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 12, color: Colors.black54),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );

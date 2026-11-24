@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 
 import '../../models/provas.dart';
+import '../../models/turma.dart';
 import '../../service/prova_service.dart';
+import '../../service/turma_service.dart';
 import '../../widgets/drawernav.dart';
 import '../../widgets/header.dart';
 import '../../widgets/navegar.dart';
 import '../BancoQuestoes/elem_comuns.dart';
-import 'atrelar_prova.dart';
+import 'alunos_da_prova.dart';
 import 'previa_papel.dart';
 
 class DetalheProvaPage extends StatefulWidget {
@@ -22,9 +24,10 @@ class _DetalheProvaPageState extends State<DetalheProvaPage> {
   late final Stream<ProvaSalva?> _prova = _service.observarPorId(
     widget.provaId,
   );
-  late final Stream<List<VinculoProva>> _vinculos = _service.observarVinculos(
+  late final Stream<List<FolhaAluno>> _folhas = _service.observarFolhas(
     widget.provaId,
   );
+  late final Stream<List<Turma>> _turmas = TurmaService().getTurmas();
   int _versaoSel = 1;
 
   void _confirmarExclusao(ProvaSalva prova) {
@@ -33,7 +36,7 @@ class _DetalheProvaPageState extends State<DetalheProvaPage> {
       builder: (dialogContext) => AlertDialog(
         title: const Text('Excluir prova?'),
         content: Text(
-          'A prova "${prova.titulo}" e a atribuição dela aos alunos serão '
+          'A prova "${prova.titulo}" e a folha de todos os alunos serão '
           'excluídas. Essa ação não pode ser desfeita.',
         ),
         actions: [
@@ -64,6 +67,59 @@ class _DetalheProvaPageState extends State<DetalheProvaPage> {
     );
   }
 
+  Widget _cardTurma(ProvaSalva prova, Turma turma, int comProva) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Material(
+        color: kListCard,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => AlunosDaProvaPage(prova: prova, turma: turma),
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                const Icon(Icons.class_outlined, color: kGreen),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        turma.nome,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        comProva == 0
+                            ? 'Nenhum aluno com esta prova'
+                            : '$comProva aluno(s) com esta prova',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.grey.shade700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.chevron_right),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -72,10 +128,7 @@ class _DetalheProvaPageState extends State<DetalheProvaPage> {
         preferredSize: Size.fromHeight(60),
         child: Header(),
       ),
-      bottomNavigationBar: Navegar(
-        onVoltar: () => Navigator.pop(context),
-        onAvancar: () {},
-      ),
+      bottomNavigationBar: Navegar(onVoltar: () => Navigator.pop(context)),
       body: SafeArea(
         child: StreamBuilder<ProvaSalva?>(
           stream: _prova,
@@ -104,32 +157,53 @@ class _DetalheProvaPageState extends State<DetalheProvaPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Menu lateral + título da prova
                   MenuTitle(title: prova.titulo, fontSize: 24),
-                  Padding(
-                    padding: const EdgeInsets.only(left: 40, top: 4),
-                    child: Text(
-                      '${prova.questoes.length} questões · ${prova.versoes.length} versões',
-                      style: TextStyle(color: Colors.grey.shade700),
-                    ),
+                  const SizedBox(height: 24),
+                  const Text(
+                    'Turmas e alunos',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
                   ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      style: FilledButton.styleFrom(
-                        backgroundColor: kGreen,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                      ),
-                      onPressed: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => AtrelarProvaPage(prova: prova),
-                        ),
-                      ),
-                      icon: const Icon(Icons.group_add_outlined),
-                      label: const Text('Atrelar a alunos/turmas'),
-                    ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Escolha uma turma para atrelar esta prova aos alunos.',
+                    style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
+                  ),
+                  const SizedBox(height: 12),
+                  StreamBuilder<List<FolhaAluno>>(
+                    stream: _folhas,
+                    builder: (context, fsnap) {
+                      if (fsnap.hasError) {
+                        return Text('Erro ao carregar: ${fsnap.error}');
+                      }
+                      final folhas = fsnap.data ?? [];
+                      return StreamBuilder<List<Turma>>(
+                        stream: _turmas,
+                        builder: (context, tsnap) {
+                          if (tsnap.connectionState ==
+                                  ConnectionState.waiting &&
+                              !tsnap.hasData) {
+                            return const LinearProgressIndicator();
+                          }
+                          final turmas = tsnap.data ?? [];
+                          if (turmas.isEmpty) {
+                            return Text(
+                              'Você ainda não tem turmas. Crie uma em "Turmas".',
+                              style: TextStyle(color: Colors.grey.shade700),
+                            );
+                          }
+                          return Column(
+                            children: [
+                              for (final t in turmas)
+                                _cardTurma(
+                                  prova,
+                                  t,
+                                  folhas.where((f) => f.turmaId == t.id).length,
+                                ),
+                            ],
+                          );
+                        },
+                      );
+                    },
                   ),
                   const SizedBox(height: 24),
                   const Text(
@@ -161,41 +235,6 @@ class _DetalheProvaPageState extends State<DetalheProvaPage> {
                     titulo: prova.titulo,
                     subtitulo: 'Versão ${versao.numero}',
                     itens: itens,
-                  ),
-                  const SizedBox(height: 24),
-                  const Text(
-                    'Alunos com esta prova',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(height: 8),
-                  StreamBuilder<List<VinculoProva>>(
-                    stream: _vinculos,
-                    builder: (context, vsnap) {
-                      final lista = vsnap.data ?? [];
-                      if (lista.isEmpty) {
-                        return Text(
-                          'Ainda não foi atrelada a nenhum aluno.',
-                          style: TextStyle(color: Colors.grey.shade700),
-                        );
-                      }
-                      return Column(
-                        children: [
-                          for (final v in lista)
-                            ListTile(
-                              dense: true,
-                              contentPadding: EdgeInsets.zero,
-                              title: Text(v.alunoNome),
-                              subtitle: Text(v.turmaNome),
-                              trailing: Text(
-                                'Versão ${v.versao}',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                        ],
-                      );
-                    },
                   ),
                   const SizedBox(height: 16),
                   Center(

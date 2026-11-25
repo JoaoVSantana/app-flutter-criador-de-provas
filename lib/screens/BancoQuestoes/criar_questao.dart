@@ -26,13 +26,11 @@ class _CreateQuestionSheetState extends State<CreateQuestionSheet> {
   );
   Set<int> _corretas = {};
   bool _variasCorretas = false;
-  final _esperada = TextEditingController();
 
   @override
   void dispose() {
     _assunto.dispose();
     _enunciado.dispose();
-    _esperada.dispose();
     for (final c in _alts) {
       c.dispose();
     }
@@ -109,10 +107,8 @@ class _CreateQuestionSheetState extends State<CreateQuestionSheet> {
       alternativas: switch (_tipo!) {
         Tipo.multipla => _alts.map((c) => c.text.trim()).toList(),
         Tipo.vf => ['Verdadeiro', 'Falso'],
-        Tipo.dissertativa => [],
       },
-      corretas: _tipo == Tipo.dissertativa ? {} : _corretas,
-      respostaEsperada: _esperada.text.trim(),
+      corretas: _corretas,
     );
     Navigator.pop(context, q);
   }
@@ -280,18 +276,6 @@ class _CreateQuestionSheetState extends State<CreateQuestionSheet> {
         ),
         if (_tipo == Tipo.multipla) ..._alternativas(),
         if (_tipo == Tipo.vf) ..._verdadeiroFalso(),
-        if (_tipo == Tipo.dissertativa) ...[
-          _label('Resposta esperada (opcional)'),
-          TextField(
-            controller: _esperada,
-            minLines: 2,
-            maxLines: 5,
-            decoration: const InputDecoration(
-              hintText: 'Critérios ou resposta modelo para correção',
-              border: OutlineInputBorder(),
-            ),
-          ),
-        ],
       ],
     );
   }

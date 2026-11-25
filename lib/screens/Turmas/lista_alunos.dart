@@ -26,29 +26,87 @@ class ListaAlunosScreen extends StatefulWidget {
 class _ListaAlunosScreenState extends State<ListaAlunosScreen> {
   final AlunoService _alunoService = AlunoService();
 
-  void _novoAluno() {
-    mostrarDialogNome(
-      context,
-      titulo: 'Novo aluno',
-      rotulo: 'Nome do aluno',
-      onSalvar: (nome) async {
-        await _alunoService.adicionarAluno(turmaId: widget.turmaId, nome: nome);
-        return null;
-      },
-    );
+  void _mostrarMensagem(String mensagem) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(mensagem)));
   }
 
-  void _renomearAluno(Aluno aluno) {
-    mostrarDialogNome(
-      context,
-      titulo: 'Editar aluno',
-      rotulo: 'Nome do aluno',
-      inicial: aluno.nome,
-      onSalvar: (nome) async {
-        await _alunoService.renomearAluno(
-          turmaId: widget.turmaId,
-          alunoId: aluno.id,
-          nome: nome,
+  void _adicionarAlunoModal() {
+    final nomeController = TextEditingController();
+    final matriculaController = TextEditingController();
+    final emailController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Adicionar Aluno'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nomeController,
+                decoration: const InputDecoration(labelText: 'Nome do Aluno'),
+              ),
+              TextField(
+                controller: emailController,
+                decoration: const InputDecoration(labelText: 'E-mail'),
+              ),
+              TextField(
+                controller: matriculaController,
+                decoration: const InputDecoration(labelText: 'Matrícula'),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text(
+                'Cancelar',
+                style: TextStyle(color: Colors.grey),
+              ),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green[700],
+              ),
+              onPressed: () async {
+                final nome = nomeController.text.trim();
+                final email = emailController.text.trim();
+                final matricula = matriculaController.text.trim();
+
+                if (nome.isEmpty || matricula.isEmpty) {
+                  _mostrarMensagem('Preencha o nome e a matrícula do aluno.');
+                  return;
+                }
+
+                // Pega o UID do utilizador autenticado no momento da criação
+                final String? uid = FirebaseAuth.instance.currentUser?.uid;
+
+                final novoAluno = Aluno(
+                  id: '',
+                  nome: nome,
+                  email: email,
+                  matricula: matricula,
+                  turmaID: widget.turmaId,
+                  criadoPor: uid ?? '', // <--- Passando o UID obrigatório
+                );
+
+                try {
+                  await _alunoService.adicionarAluno(novoAluno);
+                  if (dialogContext.mounted) Navigator.pop(dialogContext);
+                } catch (e) {
+                  final msg = e.toString().replaceFirst('Exception: ', '');
+                  _mostrarMensagem(msg);
+                }
+              },
+              child: const Text(
+                'Salvar',
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
+          ],
         );
       },
     );
@@ -149,36 +207,49 @@ class _ListaAlunosScreenState extends State<ListaAlunosScreen> {
                         size: 28,
                       ),
                       title: Text(aluno.nome),
-                      trailing: PopupMenuButton<String>(
-                        onSelected: (v) {
-                          if (v == 'editar') {
-                            _renomearAluno(aluno);
-                          } else {
-                            _confirmarRemocaoAluno(aluno);
-                          }
-                        },
-                        itemBuilder: (_) => const [
-                          PopupMenuItem(
-                            value: 'editar',
-                            child: ListTile(
-                              leading: Icon(Icons.edit_outlined),
-                              title: Text('Editar nome'),
-                              contentPadding: EdgeInsets.zero,
-                            ),
-                          ),
-                          PopupMenuItem(
-                            value: 'excluir',
-                            child: ListTile(
-                              leading: Icon(
+                      subtitle: Text(
+                        aluno.matricula.isNotEmpty
+                            ? 'Matrícula: ${aluno.matricula} • E-mail: ${aluno.email}'
+                            : 'E-mail: ${aluno.email}',
+                      ),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (usuarioEstaLogado)
+                            IconButton(
+                              icon: const Icon(
                                 Icons.delete_outline,
                                 color: Colors.red,
                               ),
-                              title: Text(
-                                'Excluir',
-                                style: TextStyle(color: Colors.red),
-                              ),
-                              contentPadding: EdgeInsets.zero,
+                              onPressed: () => _confirmarRemocaoAluno(aluno),
                             ),
+                          ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green[700],
+                            ),
+                            icon: const Icon(
+                              Icons.qr_code,
+                              size: 18,
+                              color: Colors.white,
+                            ),
+                            label: const Text(
+                              'Folha',
+                              style: TextStyle(color: Colors.white),
+                            ),
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => FolhaRespostaScreen(
+                                    nomeAluno: aluno.nome,
+                                    matricula: aluno.matricula.isNotEmpty
+                                        ? aluno.matricula
+                                        : aluno.email,
+                                    turma: widget.turmaNome,
+                                  ),
+                                ),
+                              );
+                            },
                           ),
                         ],
                       ),

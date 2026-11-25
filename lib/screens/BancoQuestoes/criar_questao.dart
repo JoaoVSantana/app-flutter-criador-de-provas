@@ -2,8 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../../models/materia.dart';
-import '../../service/materia_service.dart';
+import '/models/turma.dart';
+import '/service/materia_service.dart';
+import '/service/turma_service.dart';
 import 'elem_comuns.dart';
 
 const _novo = '__novo__';
@@ -19,9 +20,13 @@ class CreateQuestionSheet extends StatefulWidget {
 }
 
 class _CreateQuestionSheetState extends State<CreateQuestionSheet> {
+  final _turmaService = TurmaService();
   final _materiaService = MateriaService();
-  StreamSubscription<List<Materia>>? _sub;
-  List<Materia> _materias = [];
+
+  late final Stream<List<Turma>> _turmasStream = _turmaService.getTurmas();
+  late final Stream<List<String>> _materiasStream = _materiaService.getMaterias(
+    padrao: kMaterias,
+  );
 
   int _step = 0;
   String? _erro;
@@ -95,11 +100,99 @@ class _CreateQuestionSheetState extends State<CreateQuestionSheet> {
     super.dispose();
   }
 
-  Materia? get _materiaAtual {
-    for (final m in _materias) {
-      if (m.id == _materiaId) return m;
+  Future<void> _abrirModalNovaMateria() async {
+    final controller = TextEditingController();
+    String? erroModal;
+    bool salvando = false;
+
+    final criada = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Nova matéria'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: controller,
+                    autofocus: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Nome da matéria',
+                      hintText: 'Ex.: Inglês, Física, Química',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  if (erroModal != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      erroModal!,
+                      style: const TextStyle(color: Colors.red, fontSize: 13),
+                    ),
+                  ],
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: salvando
+                      ? null
+                      : () => Navigator.pop(dialogContext),
+                  child: const Text('Cancelar'),
+                ),
+                FilledButton(
+                  style: FilledButton.styleFrom(backgroundColor: kGreen),
+                  onPressed: salvando
+                      ? null
+                      : () async {
+                          setDialogState(() {
+                            salvando = true;
+                            erroModal = null;
+                          });
+                          try {
+                            final nomeSalvo = await _materiaService
+                                .adicionarMateria(controller.text);
+                            if (dialogContext.mounted) {
+                              Navigator.pop(dialogContext, nomeSalvo);
+                            }
+                          } catch (e) {
+                            setDialogState(() {
+                              salvando = false;
+                              erroModal = e.toString().replaceFirst(
+                                'Exception: ',
+                                '',
+                              );
+                            });
+                          }
+                        },
+                  child: Text(salvando ? 'Salvando...' : 'Adicionar'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    controller.dispose();
+
+    if (criada != null && criada.isNotEmpty && mounted) {
+      setState(() {
+        _materia = criada;
+        _erro = null;
+      });
     }
-    return null;
+  }
+
+  void _proximo() {
+    if (_materia == null) return _setErro('Escolha ou crie uma matéria.');
+    if (_nivel == null) return _setErro('Escolha o nível da questão.');
+    if (_tipo == null) return _setErro('Escolha o tipo de questão.');
+    setState(() {
+      _erro = null;
+      _corretas = {};
+      _step = 1;
+    });
   }
 
   bool get _podeAvancar =>
@@ -346,30 +439,44 @@ class _CreateQuestionSheetState extends State<CreateQuestionSheet> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _seletor(
-          rotulo: 'Matéria',
-          valor: materia?.id,
-          itens: <DropdownMenuItem<String>>[
-            ..._materias.map(
-              (m) => DropdownMenuItem(
-                value: m.id,
-                child: Text(m.nome, overflow: TextOverflow.ellipsis),
-              ),
-            ),
-            const DropdownMenuItem(
-              value: _novo,
-              child: _OpcaoCriar('Criar matéria'),
-            ),
-          ],
-          onChanged: (v) {
-            if (v == _novo) {
-              _criarMateria();
-              return;
-            }
-            setState(() {
-              _materiaId = v;
-              _assunto = null;
-            });
+        StreamBuilder<List<String>>(
+          stream: _materiasStream,
+          initialData: kMaterias,
+          builder: (context, snap) {
+            final materiasDisponiveis = snap.data ?? kMaterias;
+            final materiaValida =
+                _materia != null && materiasDisponiveis.contains(_materia)
+                ? _materia
+                : null;
+
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    value: materiaValida,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Matéria',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: materiasDisponiveis
+                        .map((m) => DropdownMenuItem(value: m, child: Text(m)))
+                        .toList(),
+                    onChanged: (v) => setState(() => _materia = v),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                SizedBox(
+                  height: 56,
+                  child: OutlinedButton.icon(
+                    onPressed: _abrirModalNovaMateria,
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text('Nova'),
+                  ),
+                ),
+              ],
+            );
           },
         ),
         const SizedBox(height: 14),
@@ -413,14 +520,60 @@ class _CreateQuestionSheetState extends State<CreateQuestionSheet> {
                 setState(() => _nivel = s.isEmpty ? null : s.first),
           ),
         ),
-        if (!_podeAvancar)
-          Padding(
-            padding: const EdgeInsets.only(top: 16),
-            child: Text(
-              'Escolha matéria, assunto e nível para continuar.',
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
-            ),
-          ),
+        _label('Turmas (opcional — pode marcar mais de uma)'),
+        StreamBuilder<List<Turma>>(
+          stream: _turmasStream,
+          builder: (context, snap) {
+            if (snap.connectionState == ConnectionState.waiting &&
+                !snap.hasData) {
+              return const Padding(
+                padding: EdgeInsets.symmetric(vertical: 4),
+                child: LinearProgressIndicator(),
+              );
+            }
+            final turmasDisponiveis = (snap.data ?? [])
+                .map((t) => t.nome.trim())
+                .where((nome) => nome.isNotEmpty)
+                .toSet()
+                .toList();
+
+            if (turmasDisponiveis.isEmpty) {
+              return Text(
+                'Nenhuma turma cadastrada ainda. Você pode criar a questão sem turma.',
+                style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
+              );
+            }
+
+            return Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              children: turmasDisponiveis
+                  .map(
+                    (t) => FilterChip(
+                      label: Text(t),
+                      selected: _turmas.contains(t),
+                      onSelected: (sel) => setState(
+                        () => sel ? _turmas.add(t) : _turmas.remove(t),
+                      ),
+                    ),
+                  )
+                  .toList(),
+            );
+          },
+        ),
+        _label('Tipo de questão'),
+        Wrap(
+          spacing: 8,
+          children: Tipo.values
+              .map(
+                (t) => ChoiceChip(
+                  label: Text(t.label),
+                  selected: _tipo == t,
+                  onSelected: (_) => setState(() => _tipo = t),
+                ),
+              )
+              .toList(),
+        ),
       ],
     );
   }

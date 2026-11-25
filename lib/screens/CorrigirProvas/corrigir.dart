@@ -32,11 +32,7 @@ class _CorrigirState extends State<Corrigir> {
   static const Color verde = Color(0xFF4C6B5E);
   static const Color texto = Color.fromARGB(255, 26, 29, 28);
 
-  final List<String> etapas = [
-    'Identificar prova',
-    'Conferir gabarito',
-    'Ler prova',
-  ];
+  final etapas = ['Identificar prova', 'Conferir gabarito', 'Ler prova'];
 
   final TextEditingController _codigoController = TextEditingController();
   final TextEditingController _nomeController = TextEditingController();
@@ -45,12 +41,42 @@ class _CorrigirState extends State<Corrigir> {
   int etapa = 0;
   String? _provaId;
   Map<String, dynamic>? _prova;
-  List<Map<String, dynamic>> _questoes = [];
-  List<String?> _respostas = [];
+  var _questoes = [];
+  var _respostas = <String?>[];
   bool _carregando = false;
   bool _salvando = false;
 
   String get _uid => _auth.currentUser?.uid ?? '';
+
+  Stream<QuerySnapshot> _provasStream() {
+    if (_uid.isEmpty) {
+      return const Stream.empty();
+    }
+    return _db
+        .collection('provas')
+        .where('professorId', isEqualTo: _uid)
+        .snapshots();
+  }
+
+  Stream<QuerySnapshot> _questoesStream() {
+    if (_uid.isEmpty) {
+      return const Stream.empty();
+    }
+    return _db
+        .collection('questoes')
+        .where('professorId', isEqualTo: _uid)
+        .snapshots();
+  }
+
+  String _formatarTurmasProva(Map<String, dynamic>? prova) {
+    if (prova == null) return '—';
+    final nomesRaw = prova['turmasNomes'];
+    if (nomesRaw is List && nomesRaw.isNotEmpty) {
+      return nomesRaw.map((e) => e.toString()).join(', ');
+    }
+    final turmaUnica = (prova['turma'] ?? '').toString().trim();
+    return turmaUnica.isEmpty ? 'Sem turma' : turmaUnica;
+  }
 
   @override
   void dispose() {
@@ -61,6 +87,11 @@ class _CorrigirState extends State<Corrigir> {
   }
 
   Future<void> _carregarProva(String id) async {
+    if (_uid.isEmpty) {
+      _mensagem('Faça login para carregar a prova.');
+      return;
+    }
+
     setState(() {
       _carregando = true;
       _provaId = id;
@@ -74,14 +105,22 @@ class _CorrigirState extends State<Corrigir> {
       }
 
       final dados = doc.data()!;
+      if (dados['professorId'] != _uid) {
+        throw Exception('Você não tem permissão para acessar esta prova.');
+      }
 
-      final ids = List<String>.from(dados['questoesIds'] ?? []);
+      final idsRaw = dados['questoesIds'];
+      final ids = idsRaw is List
+          ? idsRaw.map((e) => e.toString()).toList()
+          : <String>[];
+
       if (ids.isEmpty) {
         throw Exception('Esta prova não possui questões vinculadas.');
       }
 
-      final gabarito = Map<String, dynamic>.from(dados['gabarito'] ?? {});
-      final questoes = <Map<String, dynamic>>[];
+      final gabaritoRaw = dados['gabarito'];
+      final gabarito = gabaritoRaw is Map ? gabaritoRaw : <dynamic, dynamic>{};
+      final questoes = [];
 
       for (final questaoId in ids) {
         final qDoc = await _db.collection('questoes').doc(questaoId).get();
@@ -89,8 +128,16 @@ class _CorrigirState extends State<Corrigir> {
         if (!qDoc.exists) continue;
 
         final q = qDoc.data()!;
-        final alternativas = List<String>.from(q['alternativas'] ?? []);
-        final corretas = List<int>.from(q['corretas'] ?? []);
+        final altsRaw = q['alternativas'];
+        final alternativas = altsRaw is List
+            ? altsRaw.map((e) => e.toString()).toList()
+            : <String>[];
+
+        final corretasRaw = q['corretas'];
+        final corretas = corretasRaw is List
+            ? corretasRaw.map((e) => (e as num).toInt()).toList()
+            : <int>[];
+
         final letraCorreta =
             corretas.isNotEmpty &&
                 corretas.first >= 0 &&
@@ -212,7 +259,7 @@ class _CorrigirState extends State<Corrigir> {
         'provaId': _provaId,
         'tituloProva': _prova!['titulo'] ?? 'Prova',
         'disciplina': _prova!['disciplina'] ?? '',
-        'turma': _prova!['turma'] ?? '',
+        'turma': _formatarTurmasProva(_prova),
         'alunoNome': _nomeController.text.trim(),
         'matricula': _matriculaController.text.trim(),
         'respostas': respostasSalvas,
@@ -221,7 +268,7 @@ class _CorrigirState extends State<Corrigir> {
         'erros': erros,
         'emBranco': emBranco,
         'nota': nota,
-        'aproveitamento': acertos / total,
+        'aproveitamento': total == 0 ? 0.0 : acertos / total,
         'dataCorrecao': FieldValue.serverTimestamp(),
       });
 
@@ -242,6 +289,11 @@ class _CorrigirState extends State<Corrigir> {
   }
 
   Future<void> _criarProva() async {
+    if (_uid.isEmpty) {
+      _mensagem('Faça login para cadastrar uma prova.');
+      return;
+    }
+
     final nomeController = TextEditingController();
     final disciplinaController = TextEditingController();
     final turmaController = TextEditingController();
@@ -283,11 +335,8 @@ class _CorrigirState extends State<Corrigir> {
                   ),
                   SizedBox(
                     height: 240,
-                    child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                      stream: _db
-                          .collection('questoes')
-                          .where('professorId', isEqualTo: _uid)
-                          .snapshots(),
+                    child: StreamBuilder<QuerySnapshot>(
+                      stream: _questoesStream(),
                       builder: (context, snapshot) {
                         if (snapshot.hasError) {
                           return const Center(
@@ -313,7 +362,7 @@ class _CorrigirState extends State<Corrigir> {
                           itemCount: docs.length,
                           itemBuilder: (context, index) {
                             final doc = docs[index];
-                            final dados = doc.data();
+                            final dados = (doc.data() as Map?) ?? {};
                             final titulo = (dados['enunciado'] ?? 'Questão')
                                 .toString();
 
@@ -370,9 +419,10 @@ class _CorrigirState extends State<Corrigir> {
 
     if (nomeController.text.trim().isEmpty ||
         disciplinaController.text.trim().isEmpty ||
-        turmaController.text.trim().isEmpty ||
         selecionadas.isEmpty) {
-      _mensagem('Preencha os campos e selecione ao menos uma questão.');
+      _mensagem(
+        'Preencha título, disciplina e selecione ao menos uma questão.',
+      );
       return;
     }
 
@@ -385,8 +435,15 @@ class _CorrigirState extends State<Corrigir> {
         if (!doc.exists) continue;
 
         final dados = doc.data()!;
-        final corretas = List<int>.from(dados['corretas'] ?? []);
-        final alternativas = List<String>.from(dados['alternativas'] ?? []);
+        final corretasRaw = dados['corretas'];
+        final corretas = corretasRaw is List
+            ? corretasRaw.map((e) => (e as num).toInt()).toList()
+            : <int>[];
+
+        final altsRaw = dados['alternativas'];
+        final alternativas = altsRaw is List
+            ? altsRaw.map((e) => e.toString()).toList()
+            : <String>[];
 
         if (corretas.isEmpty ||
             corretas.first < 0 ||
@@ -400,12 +457,14 @@ class _CorrigirState extends State<Corrigir> {
       }
 
       final provaRef = _db.collection('provas').doc();
+      final turmaTexto = turmaController.text.trim();
 
       await provaRef.set({
         'professorId': _uid,
         'titulo': nomeController.text.trim(),
         'disciplina': disciplinaController.text.trim(),
-        'turma': turmaController.text.trim(),
+        'turma': turmaTexto,
+        'turmasNomes': turmaTexto.isEmpty ? <String>[] : <String>[turmaTexto],
         'questoesIds': selecionadas.toList(),
         'gabarito': gabarito,
         'codigoQr': provaRef.id,
@@ -445,35 +504,81 @@ class _CorrigirState extends State<Corrigir> {
     });
   }
 
+  VoidCallback? _acaoVoltarRodape() {
+    if (etapa == 0) {
+      return Navigator.canPop(context) ? () => Navigator.pop(context) : null;
+    }
+    if (etapa == 1) return _reiniciar;
+    if (etapa == 2) return () => setState(() => etapa = 1);
+    if (etapa == 3) return () => setState(() => etapa = 2);
+    return _reiniciar;
+  }
+
+  VoidCallback? _acaoAvancarRodape() {
+    if (etapa == 0 && _provaId != null) {
+      return () => _carregarProva(_provaId!);
+    }
+    if (etapa == 1 && _prova != null) return _validarCodigo;
+    if (etapa == 2) return _irParaRespostas;
+    if (etapa == 3 && !_salvando) return _salvarCorrecao;
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: fundo,
       drawer: const DrawerNav(),
+      backgroundColor: fundo,
       appBar: const PreferredSize(
-        preferredSize: Size.fromHeight(60),
+        preferredSize: Size.fromHeight(64),
         child: Header(),
       ),
-      bottomNavigationBar: Navegar(
-        onVoltar: _voltar,
-        onAvancar: null, // as etapas avançam pelos botões da própria tela
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: Navegar(
+          onVoltar: _acaoVoltarRodape(),
+          onAvancar: _acaoAvancarRodape(),
+          rotuloCentro: etapa == 0 ? 'Correção de provas' : 'Etapa $etapa',
+        ),
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 900),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              child: Row(
                 children: [
-                  const MenuTitle(title: 'Correção de provas', fontSize: 28),
-                  const SizedBox(height: 16),
-                  _buildConteudo(),
+                  Builder(
+                    builder: (ctx) => IconButton(
+                      icon: const Icon(Icons.menu, color: verde),
+                      tooltip: 'Abrir menu',
+                      onPressed: () => Scaffold.of(ctx).openDrawer(),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Correção de provas',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: verde,
+                    ),
+                  ),
                 ],
               ),
             ),
-          ),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(24),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 900),
+                    child: _buildConteudo(),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -507,7 +612,7 @@ class _CorrigirState extends State<Corrigir> {
       decoration: BoxDecoration(
         color: cinza,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: verde.withOpacity(0.25)),
+        border: Border.all(color: verde.withValues(alpha: 0.25)),
       ),
       child: Column(
         children: [
@@ -542,82 +647,99 @@ class _CorrigirState extends State<Corrigir> {
             style: TextStyle(fontSize: 16, color: texto),
           ),
           const SizedBox(height: 28),
-          StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-            stream: _db
-                .collection('provas')
-                .where('professorId', isEqualTo: _uid)
-                .snapshots(),
-            builder: (context, snapshot) {
-              if (snapshot.hasError) {
-                return const Text('Erro ao carregar provas do Firebase.');
-              }
+          if (_uid.isEmpty)
+            const Text(
+              'Faça login para carregar suas provas.',
+              style: TextStyle(color: texto),
+            )
+          else
+            StreamBuilder<QuerySnapshot>(
+              stream: _provasStream(),
+              builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  return Text(
+                    'Erro ao carregar provas: ${snapshot.error}',
+                    textAlign: TextAlign.center,
+                  );
+                }
 
-              if (!snapshot.hasData) {
-                return const CircularProgressIndicator();
-              }
+                if (!snapshot.hasData) {
+                  return const CircularProgressIndicator();
+                }
 
-              final docs = snapshot.data!.docs;
+                final docs = snapshot.data!.docs;
+                final valorSelecionado = docs.any((d) => d.id == _provaId)
+                    ? _provaId
+                    : (docs.isNotEmpty ? docs.first.id : null);
 
-              return Column(
-                children: [
-                  if (docs.isNotEmpty)
-                    DropdownButtonFormField<String>(
-                      value: docs.any((d) => d.id == _provaId)
-                          ? _provaId
-                          : null,
-                      isExpanded: true,
-                      decoration: InputDecoration(
-                        labelText: 'Prova cadastrada',
-                        filled: true,
-                        fillColor: fundo,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
-                      items: docs.map((doc) {
-                        final dados = doc.data();
-                        return DropdownMenuItem<String>(
-                          value: doc.id,
-                          child: Text(
-                            '${dados['titulo'] ?? 'Prova'} • ${dados['turma'] ?? ''}',
-                            overflow: TextOverflow.ellipsis,
+                if (valorSelecionado != null && _provaId != valorSelecionado) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted && _provaId != valorSelecionado) {
+                      setState(() => _provaId = valorSelecionado);
+                    }
+                  });
+                }
+
+                return Column(
+                  children: [
+                    if (docs.isNotEmpty)
+                      DropdownButtonFormField<String>(
+                        initialValue: valorSelecionado,
+                        isExpanded: true,
+                        decoration: InputDecoration(
+                          labelText: 'Prova cadastrada',
+                          filled: true,
+                          fillColor: fundo,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
                           ),
-                        );
-                      }).toList(),
-                      onChanged: (id) => setState(() => _provaId = id),
-                    )
-                  else
-                    const Text('Nenhuma prova cadastrada ainda.'),
-                  const SizedBox(height: 18),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 52,
-                    child: ElevatedButton.icon(
-                      onPressed: _criarProva,
-                      icon: const Icon(Icons.add),
-                      label: const Text('Cadastrar prova'),
-                      style: _estiloBotao(),
-                    ),
-                  ),
-                  if (docs.isNotEmpty) ...[
-                    const SizedBox(height: 12),
+                        ),
+                        items: docs.map((doc) {
+                          final dados =
+                              (doc.data() as Map<String, dynamic>?) ?? {};
+                          final turmasLabel = _formatarTurmasProva(dados);
+                          return DropdownMenuItem<String>(
+                            value: doc.id,
+                            child: Text(
+                              '${dados['titulo'] ?? 'Prova'} • $turmasLabel',
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: (id) => setState(() => _provaId = id),
+                      )
+                    else
+                      const Text('Nenhuma prova cadastrada ainda.'),
+                    const SizedBox(height: 18),
                     SizedBox(
                       width: double.infinity,
                       height: 52,
                       child: ElevatedButton.icon(
-                        onPressed: _provaId == null
-                            ? null
-                            : () => _carregarProva(_provaId!),
-                        icon: const Icon(Icons.play_arrow),
-                        label: const Text('Iniciar correção'),
+                        onPressed: _criarProva,
+                        icon: const Icon(Icons.add),
+                        label: const Text('Cadastrar prova'),
                         style: _estiloBotao(),
                       ),
                     ),
+                    if (docs.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 52,
+                        child: ElevatedButton.icon(
+                          onPressed: valorSelecionado == null
+                              ? null
+                              : () => _carregarProva(valorSelecionado),
+                          icon: const Icon(Icons.play_arrow),
+                          label: const Text('Iniciar correção'),
+                          style: _estiloBotao(),
+                        ),
+                      ),
+                    ],
                   ],
-                ],
-              );
-            },
-          ),
+                );
+              },
+            ),
         ],
       ),
     );
@@ -670,7 +792,7 @@ class _CorrigirState extends State<Corrigir> {
       decoration: BoxDecoration(
         color: cinza,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: verde.withOpacity(0.2)),
+        border: Border.all(color: verde.withValues(alpha: 0.2)),
       ),
       child: Column(
         children: [
@@ -794,7 +916,10 @@ class _CorrigirState extends State<Corrigir> {
           const SizedBox(height: 18),
           ...List.generate(_questoes.length, (i) {
             final q = _questoes[i];
-            final alternativas = List<String>.from(q['alternativas'] ?? []);
+            final altsRaw = q['alternativas'];
+            final alternativas = altsRaw is List
+                ? altsRaw.map((e) => e.toString()).toList()
+                : <String>[];
 
             return Card(
               color: fundo,
@@ -822,7 +947,7 @@ class _CorrigirState extends State<Corrigir> {
                         return ChoiceChip(
                           label: Text(letra),
                           selected: _respostas[i] == letra,
-                          selectedColor: verde.withOpacity(0.25),
+                          selectedColor: verde.withValues(alpha: 0.25),
                           onSelected: (selecionado) {
                             setState(() {
                               _respostas[i] = selecionado ? letra : null;
@@ -997,7 +1122,7 @@ class _CorrigirState extends State<Corrigir> {
               Text(
                 'Matrícula: ${_matriculaController.text.trim().isEmpty ? '—' : _matriculaController.text.trim()}',
               ),
-              Text('Turma: ${_prova?['turma'] ?? '—'}'),
+              Text('Turma: ${_formatarTurmasProva(_prova)}'),
               Text('Disciplina: ${_prova?['disciplina'] ?? '—'}'),
               Text('Prova: ${_prova?['titulo'] ?? '—'}'),
               Text('Data: ${DateTime.now().toString().substring(0, 10)}'),
@@ -1053,7 +1178,7 @@ class _CorrigirState extends State<Corrigir> {
     return ElevatedButton.styleFrom(
       backgroundColor: verde,
       foregroundColor: Colors.white,
-      disabledBackgroundColor: verde.withOpacity(0.4),
+      disabledBackgroundColor: verde.withValues(alpha: 0.4),
       elevation: 0,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
     );

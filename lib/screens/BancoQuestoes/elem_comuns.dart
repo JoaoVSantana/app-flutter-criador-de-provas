@@ -43,7 +43,13 @@ class Question {
   });
 }
 
-const kTurmas = ['1º Ano A', '2º Ano B'];
+const kMaterias = [
+  'Matemática',
+  'Biologia',
+  'História',
+  'Português',
+  'Geografia',
+];
 
 class MenuTitle extends StatelessWidget {
   final String title;
@@ -123,6 +129,8 @@ class QuestionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final q = question;
+    final turmasLabel = q.turmas.isEmpty ? 'Sem turma' : q.turmas.join(', ');
+
     return Container(
       decoration: BoxDecoration(
         color: kListCard,
@@ -159,13 +167,23 @@ class QuestionCard extends StatelessWidget {
           ),
           subtitle: Padding(
             padding: const EdgeInsets.only(top: 6),
-            child: Text(
-              [
-                if (q.codigo.isNotEmpty) q.codigo,
-                q.materia,
-                if (q.assunto.isNotEmpty) q.assunto,
-              ].join(' · '),
-              style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  q.assunto.isEmpty ? q.materia : '${q.materia} ·${q.assunto}',
+                  style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 4,
+                  children: [
+                    _MiniInfo(icon: Icons.checklist, text: q.tipo.label),
+                    _MiniInfo(icon: Icons.groups_outlined, text: turmasLabel),
+                  ],
+                ),
+              ],
             ),
           ),
           children: [
@@ -191,7 +209,9 @@ class QuestionCard extends StatelessWidget {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        '${String.fromCharCode(65 + i)}) ${q.alternativas[i]}',
+                        q.tipo == Tipo.multipla
+                            ? '${String.fromCharCode(65 + i)})${q.alternativas[i]}'
+                            : q.alternativas[i],
                         style: TextStyle(
                           fontWeight: q.corretas.contains(i)
                               ? FontWeight.w700

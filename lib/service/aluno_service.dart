@@ -20,15 +20,41 @@ class AlunoService {
     });
   }
 
-  Future<void> adicionarAluno({
-    required String turmaId,
-    required String nome,
-  }) async {
-    if (FirebaseAuth.instance.currentUser == null) {
-      throw Exception('Usuário não autenticado');
+  Future<void> adicionarAluno(Aluno aluno) async {
+    final String? uid = _auth.currentUser?.uid;
+    if (uid == null) throw Exception('Usuário não autenticado');
+
+    final matriculaLimpa = aluno.matricula.trim();
+    if (matriculaLimpa.isEmpty) {
+      throw Exception('Informe o número de matrícula.');
     }
-    await _col(turmaId)
-        .add({'nome': nome.trim(), 'criadoEm': FieldValue.serverTimestamp()});
+
+    final existentes = await _alunosCollection
+        .where('criadoPor', isEqualTo: uid)
+        .get();
+
+    final duplicada = existentes.docs.any((doc) {
+      final data = doc.data() as Map<String, dynamic>;
+      final matriculaExistente = (data['matricula'] ?? '')
+          .toString()
+          .trim()
+          .toLowerCase();
+      return matriculaExistente == matriculaLimpa.toLowerCase();
+    });
+
+    if (duplicada) {
+      throw Exception(
+        'Já existe um aluno cadastrado com a matrícula "$matriculaLimpa".',
+      );
+    }
+
+    await _alunosCollection.add({
+      'nome': aluno.nome.trim(),
+      'email': aluno.email.trim(),
+      'matricula': matriculaLimpa,
+      'turmaID': aluno.turmaID,
+      'criadoPor': uid,
+    });
   }
 
   Future<void> renomearAluno({

@@ -1,14 +1,11 @@
-//Tela inicial das provas: criar nova e ver as já criadas
 import 'package:flutter/material.dart';
 
-import '../../models/provas.dart';
+import '../../models/prova.dart' as model;
+import '../../models/turma.dart';
 import '../../service/prova_service.dart';
-import '../../widgets/drawernav.dart';
-import '../../widgets/header.dart';
-import '../../widgets/navegar.dart';
+import '../../service/questao_service.dart';
+import '../../service/turma_service.dart';
 import '../BancoQuestoes/elem_comuns.dart';
-import 'criar_prova.dart';
-import 'detalhe_prova.dart';
 
 class Prova extends StatefulWidget {
   const Prova({super.key});
@@ -18,183 +15,315 @@ class Prova extends StatefulWidget {
 }
 
 class _ProvaState extends State<Prova> {
-  final _service = ProvaService();
-  late final Stream<List<ProvaSalva>> _stream = _service.observarMinhas();
+  final _tituloController = TextEditingController();
+  final _disciplinaController = TextEditingController();
 
-  void _nova() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const CriarProvaPage()),
-    );
+  final _turmaService = TurmaService();
+  final _questaoService = QuestaoService();
+  final _provaService = ProvaService();
+
+  late final Stream<List<Turma>> _turmasStream = _turmaService.getTurmas();
+  late final Stream<List<Question>> _questoesStream = _questaoService
+      .observarMinhas();
+  late final Stream<List<model.Prova>> _provasStream = _provaService
+      .getProvas();
+
+  final Set<String> _turmasSelecionadasIds = {};
+  final Set<String> _questoesSelecionadasIds = {};
+  bool _salvando = false;
+
+  @override
+  void dispose() {
+    _tituloController.dispose();
+    _disciplinaController.dispose();
+    super.dispose();
   }
 
-  void _abrir(ProvaSalva p) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => DetalheProvaPage(provaId: p.id)),
-    );
+  Future<void> _salvarProva(List<Turma> todasTurmas) async {
+    final titulo = _tituloController.text.trim();
+    final disciplina = _disciplinaController.text.trim();
+
+    if (titulo.isEmpty) {
+      _mostrarMsg('Informe o título da prova.');
+      return;
+    }
+    if (_questoesSelecionadasIds.isEmpty) {
+      _mostrarMsg('Selecione pelo menos uma questão para a prova.');
+      return;
+    }
+
+    final turmasIds = _turmasSelecionadasIds.toList();
+    final turmasNomes = todasTurmas
+        .where((t) => _turmasSelecionadasIds.contains(t.id))
+        .map((t) => t.nome)
+        .toList();
+
+    setState(() => _salvando = true);
+    try {
+      final novaProva = model.Prova(
+        id: '',
+        titulo: titulo,
+        disciplina: disciplina,
+        turmasIds: turmasIds,
+        turmasNomes: turmasNomes,
+        questoesIds: _questoesSelecionadasIds.toList(),
+      );
+      await _provaService.criarProva(novaProva);
+
+      if (!mounted) return;
+      _tituloController.clear();
+      _disciplinaController.clear();
+      setState(() {
+        _turmasSelecionadasIds.clear();
+        _questoesSelecionadasIds.clear();
+      });
+      _mostrarMsg('Prova salva com sucesso!');
+    } catch (e) {
+      if (!mounted) return;
+      _mostrarMsg('Erro ao salvar prova: $e');
+    } finally {
+      if (mounted) setState(() => _salvando = false);
+    }
   }
 
-  String _data(DateTime? d) {
-    if (d == null) return '';
-    final dia = d.day.toString().padLeft(2, '0');
-    final mes = d.month.toString().padLeft(2, '0');
-    return '$dia/$mes/${d.year}';
+  Future<void> _editarTurmasProva(
+    model.Prova prova,
+    List<Turma> todasTurmas,
+  ) async {
+    final selecionadas = Set<String>.from(prova.turmasIds);
+
+    final salvou = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            return AlertDialog(
+              title: Text('Turmas — ${prova.titulo}'),
+              content: SingleChildScrollView(
+                child: todasTurmas.isEmpty
+                    ? const Text('Nenhuma turma cadastrada.')
+                    : Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: todasTurmas.map((turma) {
+                          final marcada = selecionadas.contains(turma.id);
+                          return CheckboxListTile(
+                            value: marcada,
+                            title: Text(turma.nome),
+                            onChanged: (v) {
+                              setDialogState(() {
+                                if (v == true) {
+                                  selecionadas.add(turma.id);
+                                } else {
+                                  selecionadas.remove(turma.id);
+                                }
+                              });
+                            },
+                          );
+                        }).toList(),
+                      ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('Cancelar'),
+                ),
+                FilledButton(
+                  style: FilledButton.styleFrom(backgroundColor: kGreen),
+                  onPressed: () => Navigator.pop(ctx, true),
+                  child: const Text('Salvar'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (salvou != true) return;
+
+    final ids = selecionadas.toList();
+    final nomes = todasTurmas
+        .where((t) => selecionadas.contains(t.id))
+        .map((t) => t.nome)
+        .toList();
+
+    try {
+      await _provaService.atualizarTurmasDaProva(
+        provaId: prova.id,
+        turmasIds: ids,
+        turmasNomes: nomes,
+      );
+      if (!mounted) return;
+      _mostrarMsg('Turmas da prova atualizadas!');
+    } catch (e) {
+      if (!mounted) return;
+      _mostrarMsg('Erro ao atualizar turmas: $e');
+    }
+  }
+
+  void _mostrarMsg(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      drawer: const DrawerNav(),
-      appBar: const PreferredSize(
-        preferredSize: Size.fromHeight(60),
-        child: Header(),
-      ),
-      bottomNavigationBar: Navegar(
-        onVoltar: () => Navigator.pop(context),
-        onAvancar: () {},
-      ),
-      body: SafeArea(
-        child: StreamBuilder<List<ProvaSalva>>(
-          stream: _stream,
-          builder: (context, snap) {
-            final provas = snap.data ?? [];
+    return StreamBuilder<List<Turma>>(
+      stream: _turmasStream,
+      builder: (context, turmasSnap) {
+        final turmas = turmasSnap.data ?? [];
 
-            return SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const MenuTitle(title: 'Provas', fontSize: 28),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Monte uma prova com questões do banco e aplique à sua turma.',
-                    style: TextStyle(fontSize: 14, color: Colors.grey.shade700),
-                  ),
-                  const SizedBox(height: 20),
-                  Material(
-                    color: kCard,
-                    borderRadius: BorderRadius.circular(24),
-                    elevation: 2,
-                    shadowColor: Colors.black26,
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(24),
-                      onTap: _nova,
-                      child: const SizedBox(
-                        height: 110,
-                        width: double.infinity,
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.add_circle_outline,
-                              size: 40,
-                              color: kGreen,
-                            ),
-                            SizedBox(height: 8),
-                            Text(
-                              'Nova prova',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
-                                color: kGreen,
-                              ),
-                            ),
-                          ],
+        return Scaffold(
+          appBar: AppBar(title: const Text('Montar prova')),
+          body: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              TextField(
+                controller: _tituloController,
+                decoration: const InputDecoration(
+                  labelText: 'Título da prova',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _disciplinaController,
+                decoration: const InputDecoration(
+                  labelText: 'Disciplina / Matéria',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Atrelar às turmas (opcional — pode marcar várias)',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 8),
+              if (turmasSnap.connectionState == ConnectionState.waiting &&
+                  !turmasSnap.hasData)
+                const LinearProgressIndicator()
+              else if (turmas.isEmpty)
+                Text(
+                  'Nenhuma turma cadastrada. Você pode salvar sem turma e atrelar depois.',
+                  style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
+                )
+              else
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: turmas.map((turma) {
+                    final selecionada = _turmasSelecionadasIds.contains(
+                      turma.id,
+                    );
+                    return FilterChip(
+                      label: Text(turma.nome),
+                      selected: selecionada,
+                      onSelected: (marcado) {
+                        setState(() {
+                          if (marcado) {
+                            _turmasSelecionadasIds.add(turma.id);
+                          } else {
+                            _turmasSelecionadasIds.remove(turma.id);
+                          }
+                        });
+                      },
+                    );
+                  }).toList(),
+                ),
+              const SizedBox(height: 20),
+              const Text(
+                'Selecione as questões',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 8),
+              StreamBuilder<List<Question>>(
+                stream: _questoesStream,
+                builder: (context, questoesSnap) {
+                  if (questoesSnap.connectionState == ConnectionState.waiting &&
+                      !questoesSnap.hasData) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  final questoes = questoesSnap.data ?? [];
+                  if (questoes.isEmpty) {
+                    return const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 8),
+                      child: Text('Nenhuma questão encontrada no banco.'),
+                    );
+                  }
+                  return Column(
+                    children: questoes.map((q) {
+                      final marcada = _questoesSelecionadasIds.contains(q.id);
+                      return CheckboxListTile(
+                        value: marcada,
+                        title: Text(
+                          q.enunciado,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 28),
-                  Row(
-                    children: [
-                      const Text(
-                        'Minhas provas',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
+                        subtitle: Text(
+                          q.assunto.isEmpty
+                              ? q.materia
+                              : '${q.materia} · ${q.assunto}',
                         ),
-                      ),
-                      const Spacer(),
-                      Text(
-                        '${provas.length}',
-                        style: TextStyle(color: Colors.grey.shade700),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  if (snap.hasError)
-                    Text('Erro ao carregar: ${snap.error}')
-                  else if (snap.connectionState == ConnectionState.waiting)
-                    const Center(child: CircularProgressIndicator())
-                  else if (provas.isEmpty)
-                    Text(
-                      'Você ainda não criou nenhuma prova.',
-                      style: TextStyle(color: Colors.grey.shade700),
-                    )
-                  else
-                    ...provas.map(
-                      (p) => Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: Material(
-                          color: kListCard,
-                          borderRadius: BorderRadius.circular(16),
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(16),
-                            onTap: () => _abrir(p),
-                            child: Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: Row(
-                                children: [
-                                  const Icon(
-                                    Icons.description_outlined,
-                                    color: kGreen,
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          p.titulo,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: const TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          [
-                                            '${p.questoes.length} questões',
-                                            '${p.versoes.length} versões',
-                                            if (_data(p.criadoEm).isNotEmpty)
-                                              _data(p.criadoEm),
-                                          ].join(' · '),
-                                          style: TextStyle(
-                                            fontSize: 13,
-                                            color: Colors.grey.shade700,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  const Icon(Icons.chevron_right),
-                                ],
-                              ),
-                            ),
+                        onChanged: (v) {
+                          setState(() {
+                            if (v == true) {
+                              _questoesSelecionadasIds.add(q.id);
+                            } else {
+                              _questoesSelecionadasIds.remove(q.id);
+                            }
+                          });
+                        },
+                      );
+                    }).toList(),
+                  );
+                },
+              ),
+              const SizedBox(height: 16),
+              FilledButton(
+                style: FilledButton.styleFrom(backgroundColor: kGreen),
+                onPressed: _salvando ? null : () => _salvarProva(turmas),
+                child: Text(_salvando ? 'Salvando...' : 'Salvar prova'),
+              ),
+              const Divider(height: 32),
+              const Text(
+                'Provas criadas',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 8),
+              StreamBuilder<List<model.Prova>>(
+                stream: _provasStream,
+                builder: (context, provasSnap) {
+                  final provas = provasSnap.data ?? [];
+                  if (provas.isEmpty) {
+                    return const Text('Nenhuma prova cadastrada ainda.');
+                  }
+                  return Column(
+                    children: provas.map((prova) {
+                      final turmasTexto = prova.turmasNomes.isEmpty
+                          ? 'Sem turma atrelada'
+                          : 'Turmas: ${prova.turmasNomes.join(', ')}';
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        child: ListTile(
+                          title: Text(prova.titulo),
+                          subtitle: Text(
+                            '$turmasTexto · ${prova.questoesIds.length} questão(ões)',
+                          ),
+                          trailing: IconButton(
+                            tooltip: 'Gerenciar turmas',
+                            icon: const Icon(Icons.groups_outlined),
+                            onPressed: () => _editarTurmasProva(prova, turmas),
                           ),
                         ),
-                      ),
-                    ),
-                ],
+                      );
+                    }).toList(),
+                  );
+                },
               ),
-            );
-          },
-        ),
-      ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

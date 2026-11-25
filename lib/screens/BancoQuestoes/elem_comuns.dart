@@ -8,8 +8,6 @@ const kBg = Color(0xFFFEF7FF);
 
 enum Nivel { baixo, medio, alto }
 
-enum Tipo { multipla, vf }
-
 extension NivelX on Nivel {
   String get label => switch (this) {
     Nivel.baixo => 'Baixo',
@@ -23,44 +21,28 @@ extension NivelX on Nivel {
   };
 }
 
-extension TipoX on Tipo {
-  String get label => switch (this) {
-    Tipo.multipla => 'Múltipla escolha',
-    Tipo.vf => 'Verdadeiro ou falso',
-  };
-}
-
 class Question {
   final String id;
+  final String codigo;
   final String materia;
   final String assunto;
   final Nivel nivel;
-  final Tipo tipo;
-  final List<String> turmas;
   final String enunciado;
   final List<String> alternativas;
   final Set<int> corretas;
 
   const Question({
     required this.id,
+    this.codigo = '',
     required this.materia,
     required this.assunto,
     required this.nivel,
-    required this.tipo,
-    required this.turmas,
     required this.enunciado,
     this.alternativas = const [],
     this.corretas = const {},
   });
 }
 
-const kMaterias = [
-  'Matemática',
-  'Biologia',
-  'História',
-  'Português',
-  'Geografia',
-];
 const kTurmas = ['1º Ano A', '2º Ano B'];
 
 class MenuTitle extends StatelessWidget {
@@ -126,12 +108,14 @@ class EmptyState extends StatelessWidget {
 //card de questoes
 class QuestionCard extends StatelessWidget {
   final Question question;
+  final VoidCallback? onEdit;
   final VoidCallback? onDelete;
-  final VoidCallback? onAddToExam; // futuro: botão "Adicionar à prova"
+  final VoidCallback? onAddToExam;
 
   const QuestionCard({
     super.key,
     required this.question,
+    this.onEdit,
     this.onDelete,
     this.onAddToExam,
   });
@@ -175,26 +159,13 @@ class QuestionCard extends StatelessWidget {
           ),
           subtitle: Padding(
             padding: const EdgeInsets.only(top: 6),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  q.assunto.isEmpty ? q.materia : '${q.materia} · ${q.assunto}',
-                  style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 4,
-                  children: [
-                    _MiniInfo(icon: Icons.checklist, text: q.tipo.label),
-                    _MiniInfo(
-                      icon: Icons.groups_outlined,
-                      text: q.turmas.join(', '),
-                    ),
-                  ],
-                ),
-              ],
+            child: Text(
+              [
+                if (q.codigo.isNotEmpty) q.codigo,
+                q.materia,
+                if (q.assunto.isNotEmpty) q.assunto,
+              ].join(' · '),
+              style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
             ),
           ),
           children: [
@@ -220,9 +191,7 @@ class QuestionCard extends StatelessWidget {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        q.tipo == Tipo.multipla
-                            ? '${String.fromCharCode(65 + i)}) ${q.alternativas[i]}'
-                            : q.alternativas[i],
+                        '${String.fromCharCode(65 + i)}) ${q.alternativas[i]}',
                         style: TextStyle(
                           fontWeight: q.corretas.contains(i)
                               ? FontWeight.w700
@@ -233,27 +202,44 @@ class QuestionCard extends StatelessWidget {
                   ],
                 ),
               ),
-            if (onDelete != null || onAddToExam != null) ...[
+            if (onEdit != null || onDelete != null || onAddToExam != null) ...[
               const SizedBox(height: 8),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  if (onDelete != null)
-                    TextButton.icon(
-                      onPressed: onDelete,
-                      icon: const Icon(Icons.delete_outline, color: Colors.red),
-                      label: const Text(
-                        'Excluir',
-                        style: TextStyle(color: Colors.red),
+              SizedBox(
+                width: double.infinity,
+                child: Wrap(
+                  alignment: WrapAlignment.end,
+                  spacing: 8,
+                  runSpacing: 4,
+                  children: [
+                    if (onDelete != null)
+                      TextButton.icon(
+                        onPressed: onDelete,
+                        icon: const Icon(
+                          Icons.delete_outline,
+                          color: Colors.red,
+                        ),
+                        label: const Text(
+                          'Excluir',
+                          style: TextStyle(color: Colors.red),
+                        ),
                       ),
-                    ),
-                  if (onAddToExam != null)
-                    FilledButton(
-                      style: FilledButton.styleFrom(backgroundColor: kGreen),
-                      onPressed: onAddToExam,
-                      child: const Text('Adicionar à prova'),
-                    ),
-                ],
+                    if (onEdit != null)
+                      TextButton.icon(
+                        onPressed: onEdit,
+                        icon: const Icon(Icons.edit_outlined, color: kGreen),
+                        label: const Text(
+                          'Editar',
+                          style: TextStyle(color: kGreen),
+                        ),
+                      ),
+                    if (onAddToExam != null)
+                      FilledButton(
+                        style: FilledButton.styleFrom(backgroundColor: kGreen),
+                        onPressed: onAddToExam,
+                        child: const Text('Adicionar à prova'),
+                      ),
+                  ],
+                ),
               ),
             ],
           ],
@@ -283,24 +269,6 @@ class _LevelBadge extends StatelessWidget {
           fontSize: 12,
         ),
       ),
-    );
-  }
-}
-
-class _MiniInfo extends StatelessWidget {
-  final IconData icon;
-  final String text;
-  const _MiniInfo({required this.icon, required this.text});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 15, color: Colors.grey.shade700),
-        const SizedBox(width: 4),
-        Text(text, style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
-      ],
     );
   }
 }

@@ -9,8 +9,6 @@ class UsuarioService {
 
   Future<void> cadastrar({
     required String nome,
-    required String sobrenome,
-    required String cpf,
     required String email,
     required String senha,
   }) async {
@@ -18,16 +16,9 @@ class UsuarioService {
       email: email,
       password: senha,
     );
-
     final uid = cred.user!.uid;
 
-    final usuario = Usuario(
-      uid: uid,
-      nome: nome,
-      sobrenome: sobrenome,
-      cpf: cpf,
-      email: email,
-    );
+    final usuario = Usuario(uid: uid, nome: nome, email: email);
     await _db.collection('usuarios').doc(uid).set(usuario.toMap());
   }
 

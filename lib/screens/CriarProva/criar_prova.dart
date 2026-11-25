@@ -1,0 +1,524 @@
+import 'package:flutter/material.dart';
+
+import '../../models/provas.dart';
+import '../../service/prova_service.dart';
+import '../../service/questao_service.dart';
+import '../../widgets/drawernav.dart';
+import '../../widgets/header.dart';
+import '../../widgets/navegar.dart';
+import '../BancoQuestoes/elem_comuns.dart';
+import 'detalhe_prova.dart';
+import 'previa_papel.dart';
+
+class CriarProvaPage extends StatefulWidget {
+  const CriarProvaPage({super.key});
+
+  @override
+  State<CriarProvaPage> createState() => _CriarProvaPageState();
+}
+
+class _CriarProvaPageState extends State<CriarProvaPage> {
+  final _service = ProvaService();
+  final _titulo = TextEditingController();
+  final List<Question> _selecionadas = [];
+  int _versoes = 2;
+  String? _erro;
+  bool _salvando = false;
+
+  @override
+  void dispose() {
+    _titulo.dispose();
+    super.dispose();
+  }
+
+  void _setErro(String msg) => setState(() => _erro = msg);
+
+  List<ProvaQuestao> _paraProvaQuestoes() => _selecionadas
+      .map(
+        (q) => ProvaQuestao(
+          questaoId: q.id,
+          codigo: q.codigo,
+          materia: q.materia,
+          assunto: q.assunto,
+          enunciado: q.enunciado,
+          alternativas: q.alternativas,
+          correta: q.corretas.isEmpty ? 0 : q.corretas.first,
+        ),
+      )
+      .toList();
+
+  Future<void> _adicionar() async {
+    final novas = await showModalBottomSheet<List<Question>>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: kBg,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => _SeletorQuestoes(
+        jaSelecionadas: _selecionadas.map((q) => q.id).toSet(),
+      ),
+    );
+    if (novas == null || novas.isEmpty) return;
+    setState(() {
+      _selecionadas.addAll(novas);
+      _erro = null;
+    });
+  }
+
+  void _reordenar(int de, int para) {
+    setState(() {
+      if (para > de) para -= 1;
+      final q = _selecionadas.removeAt(de);
+      _selecionadas.insert(para, q);
+    });
+  }
+
+  void _previa() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: kBg,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) => SizedBox(
+        height: MediaQuery.of(sheetContext).size.height * 0.9,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 8, 0),
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Prévia da prova',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                        color: kGreen,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(sheetContext),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: PreviaPapel(
+                  titulo: _titulo.text,
+                  subtitulo: 'Versão 1',
+                  itens: montarOriginal(_paraProvaQuestoes()),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _salvar() async {
+    final titulo = _titulo.text.trim();
+    if (titulo.isEmpty) {
+      _setErro('Dê um título para a prova.');
+      return;
+    }
+    if (_selecionadas.isEmpty) {
+      _setErro('Adicione pelo menos uma questão.');
+      return;
+    }
+    final semGabarito = _selecionadas
+        .where((q) => q.corretas.isEmpty || q.alternativas.length < 2)
+        .toList();
+    if (semGabarito.isNotEmpty) {
+      final codigos = semGabarito
+          .map((q) => q.codigo.isEmpty ? 'sem código' : q.codigo)
+          .join(', ');
+      _setErro(
+        'Estas questões não têm alternativa correta marcada: $codigos. '
+        'Edite-as no banco de questões.',
+      );
+      return;
+    }
+
+    setState(() {
+      _salvando = true;
+      _erro = null;
+    });
+
+    try {
+      final r = await _service.criar(
+        titulo: titulo,
+        questoes: _paraProvaQuestoes(),
+        quantidadeVersoes: _versoes,
+      );
+      if (!mounted) return;
+
+      if (r.versoes < _versoes) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Só foi possível gerar ${r.versoes} versões diferentes '
+              'com essas questões.',
+            ),
+          ),
+        );
+      }
+
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => DetalheProvaPage(provaId: r.id)),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _salvando = false;
+        _erro = 'Erro ao salvar a prova: $e';
+      });
+    }
+  }
+
+  Widget _secao(String texto) => Padding(
+    padding: const EdgeInsets.only(top: 24, bottom: 10),
+    child: Text(
+      texto,
+      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+    ),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      drawer: const DrawerNav(),
+      appBar: const PreferredSize(
+        preferredSize: Size.fromHeight(60),
+        child: Header(),
+      ),
+      bottomNavigationBar: Navegar(
+        onVoltar: () => Navigator.pop(context),
+        onAvancar: () {},
+      ),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Padding(
+                padding: EdgeInsets.only(top: 12),
+                child: MenuTitle(title: 'Nova prova', fontSize: 24),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _titulo,
+                maxLength: 60,
+                textCapitalization: TextCapitalization.sentences,
+                decoration: InputDecoration(
+                  labelText: 'Título da prova',
+                  filled: true,
+                  fillColor: Colors.white,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+              ),
+              _secao('Questões (${_selecionadas.length})'),
+              if (_selecionadas.isEmpty)
+                Text(
+                  'Nenhuma questão ainda. Adicione do banco de questões.',
+                  style: TextStyle(color: Colors.grey.shade700),
+                )
+              else
+                ReorderableListView(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  buildDefaultDragHandles: false,
+                  onReorder: _reordenar,
+                  children: [
+                    for (var i = 0; i < _selecionadas.length; i++)
+                      Container(
+                        key: ValueKey(_selecionadas[i].id),
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+                        decoration: BoxDecoration(
+                          color: kListCard,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          children: [
+                            ReorderableDragStartListener(
+                              index: i,
+                              child: const Padding(
+                                padding: EdgeInsets.all(8),
+                                child: Icon(
+                                  Icons.drag_handle,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                '${i + 1}. ${_selecionadas[i].enunciado}',
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            IconButton(
+                              tooltip: 'Remover',
+                              icon: const Icon(Icons.close, size: 20),
+                              onPressed: () =>
+                                  setState(() => _selecionadas.removeAt(i)),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: _adicionar,
+                icon: const Icon(Icons.add),
+                label: const Text('Adicionar questões do banco'),
+              ),
+              _secao('Versões da prova'),
+              Row(
+                children: [
+                  IconButton.outlined(
+                    onPressed: _versoes > 1
+                        ? () => setState(() => _versoes--)
+                        : null,
+                    icon: const Icon(Icons.remove),
+                  ),
+                  SizedBox(
+                    width: 56,
+                    child: Center(
+                      child: Text(
+                        '$_versoes',
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ),
+                  IconButton.outlined(
+                    onPressed: _versoes < 30
+                        ? () => setState(() => _versoes++)
+                        : null,
+                    icon: const Icon(Icons.add),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'A ordem das questões e das alternativas é embaralhada em cada versão.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              if (_erro != null) ...[
+                const SizedBox(height: 16),
+                Text(_erro!, style: const TextStyle(color: Colors.red)),
+              ],
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: _selecionadas.isEmpty ? null : _previa,
+                      child: const Text('Prévia'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FilledButton(
+                      style: FilledButton.styleFrom(backgroundColor: kGreen),
+                      onPressed: _salvando ? null : _salvar,
+                      child: _salvando
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Text('Salvar prova'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Folha para escolher questões do banco.
+class _SeletorQuestoes extends StatefulWidget {
+  final Set<String> jaSelecionadas;
+  const _SeletorQuestoes({required this.jaSelecionadas});
+
+  @override
+  State<_SeletorQuestoes> createState() => _SeletorQuestoesState();
+}
+
+class _SeletorQuestoesState extends State<_SeletorQuestoes> {
+  late final Stream<List<Question>> _stream = QuestaoService().observarMinhas();
+  final List<Question> _marcadas = [];
+  String _busca = '';
+
+  bool _estaMarcada(Question q) => _marcadas.any((m) => m.id == q.id);
+
+  void _alternar(Question q) {
+    setState(() {
+      if (_estaMarcada(q)) {
+        _marcadas.removeWhere((m) => m.id == q.id);
+      } else {
+        _marcadas.add(q);
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: SizedBox(
+        height: MediaQuery.of(context).size.height * 0.85,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 8, 0),
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Banco de questões',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                        color: kGreen,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+              child: TextField(
+                onChanged: (v) =>
+                    setState(() => _busca = v.trim().toLowerCase()),
+                decoration: InputDecoration(
+                  hintText: 'Buscar questão',
+                  prefixIcon: const Icon(Icons.search),
+                  filled: true,
+                  fillColor: Colors.white,
+                  isDense: true,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+              ),
+            ),
+            Expanded(
+              child: StreamBuilder<List<Question>>(
+                stream: _stream,
+                builder: (context, snap) {
+                  if (snap.hasError) {
+                    return Center(
+                      child: Text('Erro ao carregar: ${snap.error}'),
+                    );
+                  }
+                  if (!snap.hasData) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+
+                  final lista = snap.data!
+                      .where((q) => !widget.jaSelecionadas.contains(q.id))
+                      .where(
+                        (q) =>
+                            _busca.isEmpty ||
+                            q.enunciado.toLowerCase().contains(_busca) ||
+                            q.materia.toLowerCase().contains(_busca) ||
+                            q.assunto.toLowerCase().contains(_busca) ||
+                            q.codigo.toLowerCase().contains(_busca),
+                      )
+                      .toList();
+
+                  if (lista.isEmpty) {
+                    return const Center(
+                      child: Text('Nenhuma questão encontrada.'),
+                    );
+                  }
+
+                  return ListView.builder(
+                    itemCount: lista.length,
+                    itemBuilder: (_, i) {
+                      final q = lista[i];
+                      return CheckboxListTile(
+                        value: _estaMarcada(q),
+                        onChanged: (_) => _alternar(q),
+                        controlAffinity: ListTileControlAffinity.leading,
+                        activeColor: kGreen,
+                        title: Text(
+                          q.enunciado,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        subtitle: Text(
+                          [
+                            if (q.codigo.isNotEmpty) q.codigo,
+                            q.materia,
+                            if (q.assunto.isNotEmpty) q.assunto,
+                            q.nivel.label,
+                          ].join(' · '),
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+              child: SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  style: FilledButton.styleFrom(backgroundColor: kGreen),
+                  onPressed: _marcadas.isEmpty
+                      ? null
+                      : () => Navigator.pop(context, _marcadas),
+                  child: Text('Adicionar (${_marcadas.length})'),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

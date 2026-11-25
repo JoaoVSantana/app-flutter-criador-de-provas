@@ -1,20 +1,12 @@
 class Usuario {
   final String uid;
   final String nome;
-  final String sobrenome;
-  final String cpf;
   final String email;
 
-  const Usuario({
-    required this.uid,
-    required this.nome,
-    required this.sobrenome,
-    required this.cpf,
-    required this.email,
-  });
+  const Usuario({required this.uid, required this.nome, required this.email});
 
   Map<String, dynamic> toMap() {
-    return {'nome': nome, 'sobrenome': sobrenome, 'cpf': cpf, 'email': email};
+    return {'nome': nome, 'email': email};
   }
 
   // Map -> Objeto (para ler do Firestore)
@@ -22,8 +14,6 @@ class Usuario {
     return Usuario(
       uid: uid,
       nome: map['nome'] ?? '',
-      sobrenome: map['sobrenome'] ?? '',
-      cpf: map['cpf'] ?? '',
       email: map['email'] ?? '',
     );
   }

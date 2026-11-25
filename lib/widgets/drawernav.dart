@@ -62,13 +62,6 @@ class DrawerNav extends StatelessWidget {
               texto: 'Relatórios',
               rota: AppRoutes.relatorios,
             ),
-            const Divider(),
-            _itemMenu(
-              context,
-              icone: Icons.login_outlined,
-              texto: 'Entrar / Cadastrar',
-              rota: AppRoutes.entrar,
-            ),
           ],
         ),
       ),

@@ -1,20 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../respostaErro/respostaErro.dart';
-
-import '../Home/home.dart';
-
 import '/service/usuario_service.dart';
-
 import 'login.dart' show decoracaoCampo, BotaoPrincipal;
 
 class CadastroForm extends StatefulWidget {
   final double padding;
 
-  /// Chame quando o cadastro der certo (volta para a aba de login).
   final void Function(String email) onCadastrado;
 
   const CadastroForm({
@@ -29,18 +22,14 @@ class CadastroForm extends StatefulWidget {
 
 class _CadastroFormState extends State<CadastroForm> {
   final _nomeController = TextEditingController();
-  final _sobrenomeController = TextEditingController();
   final _emailController = TextEditingController();
-  final _cpfController = TextEditingController();
   final _senhaController = TextEditingController();
   bool _carregando = false;
 
   @override
   void dispose() {
     _nomeController.dispose();
-    _sobrenomeController.dispose();
     _emailController.dispose();
-    _cpfController.dispose();
     _senhaController.dispose();
     super.dispose();
   }
@@ -53,26 +42,21 @@ class _CadastroFormState extends State<CadastroForm> {
 
   Future<void> _fazerCadastro() async {
     final nome = _nomeController.text.trim();
-    final sobrenome = _sobrenomeController.text.trim();
     final email = _emailController.text.trim();
-    final cpf = _cpfController.text.trim();
     final senha = _senhaController.text;
 
     if (nome.isEmpty || email.isEmpty || senha.isEmpty) {
-      _mostrarErro('Preencha ao menos nome, e-mail e senha.');
+      _mostrarErro('Preencha nome, e-mail e senha.');
       return;
     }
+    if (senha.length < 6) {
+      _mostrarErro('A senha precisa ter pelo menos 6 caracteres.');
+      return;
+    }
+
     setState(() => _carregando = true);
     try {
-      await UsuarioService().cadastrar(
-        nome: nome,
-        sobrenome: sobrenome,
-        cpf: cpf,
-        email: email,
-        senha: senha,
-      );
-      if (!mounted) return;
-      Navigator.push(context, MaterialPageRoute(builder: (_) => const Home()));
+      await UsuarioService().cadastrar(nome: nome, email: email, senha: senha);
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
       _mostrarErro(traduzirErro(e.code));
@@ -90,35 +74,29 @@ class _CadastroFormState extends State<CadastroForm> {
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
-      padding: EdgeInsets.symmetric(horizontal: widget.padding),
+      padding: EdgeInsets.symmetric(horizontal: widget.padding, vertical: 12),
       child: Column(
         children: [
           TextField(
             controller: _nomeController,
+            textCapitalization: TextCapitalization.words,
+            autofillHints: const [AutofillHints.givenName],
             decoration: decoracaoCampo('Nome'),
-          ),
-          const SizedBox(height: 16),
-          TextField(
-            controller: _sobrenomeController,
-            decoration: decoracaoCampo('Sobrenome'),
           ),
           const SizedBox(height: 16),
           TextField(
             controller: _emailController,
             keyboardType: TextInputType.emailAddress,
+            autofillHints: const [AutofillHints.email],
             decoration: decoracaoCampo('Email'),
-          ),
-          const SizedBox(height: 16),
-          TextField(
-            controller: _cpfController,
-            keyboardType: TextInputType.number,
-            decoration: decoracaoCampo('CPF'),
           ),
           const SizedBox(height: 16),
           TextField(
             controller: _senhaController,
             obscureText: true,
+            autofillHints: const [AutofillHints.newPassword],
             decoration: decoracaoCampo('Senha'),
+            onSubmitted: (_) => _fazerCadastro(),
           ),
           const SizedBox(height: 24),
           BotaoPrincipal(

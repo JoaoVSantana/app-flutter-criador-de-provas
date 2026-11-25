@@ -1,11 +1,14 @@
+import 'dart:convert';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../widgets/drawernav.dart';
 import '../../widgets/header.dart';
 import '../../widgets/navegar.dart';
-import '../BancoQuestoes/elem_comuns.dart' show MenuTitle;
 
 class Corrigir extends StatefulWidget {
   const Corrigir({super.key});
@@ -17,431 +20,549 @@ class Corrigir extends StatefulWidget {
 class _CorrigirState extends State<Corrigir> {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  // Seta de voltar da barra de baixo: volta uma etapa da correção;
-  // na primeira etapa e no resultado, sai da tela.
-  void _voltar() {
-    if (etapa == 0 || etapa == 4) {
-      Navigator.pop(context);
-    } else {
-      setState(() => etapa -= 1);
-    }
-  }
 
   static const Color fundo = Color.fromARGB(255, 228, 235, 230);
   static const Color cinza = Color.fromARGB(255, 212, 214, 213);
   static const Color verde = Color(0xFF4C6B5E);
   static const Color texto = Color.fromARGB(255, 26, 29, 28);
 
-  final List<String> etapas = [
-    'Identificar prova',
-    'Conferir gabarito',
-    'Ler prova',
-  ];
-
-  final TextEditingController _codigoController = TextEditingController();
-  final TextEditingController _nomeController = TextEditingController();
-  final TextEditingController _matriculaController = TextEditingController();
-
   int etapa = 0;
-  String? _provaId;
+
+  String? _provaSelecionadaId;
   Map<String, dynamic>? _prova;
-  List<Map<String, dynamic>> _questoes = [];
-  List<String?> _respostas = [];
+  var _questoes = [];
+
+  String? _alunoSelecionadoId;
+  String _alunoNome = '';
+  String _alunoMatricula = '';
+
+  String _turmaNome = '';
+  String _disciplinaNome = '';
+
+  bool _mostrarSelecaoAluno = false;
+  Map<String, dynamic>? _dadosFolhaSelecionada;
+
+  var _respostasLidas = [];
   bool _carregando = false;
-  bool _salvando = false;
+  bool _processandoLeitura = false;
+
+  MobileScannerController? _scannerController;
 
   String get _uid => _auth.currentUser?.uid ?? '';
 
   @override
   void dispose() {
-    _codigoController.dispose();
-    _nomeController.dispose();
-    _matriculaController.dispose();
+    _scannerController?.dispose();
     super.dispose();
   }
 
-  Future<void> _carregarProva(String id) async {
+  void _iniciarCamera() {
+    if (kIsWeb) {
+      _mensagem(
+        'A leitura de QR Code pela câmera funciona no Android/mobile. No navegador, selecione a prova abaixo.',
+      );
+      return;
+    }
+
+    if (_uid.isEmpty) {
+      _mensagem('Faça login para escanear provas.');
+      return;
+    }
+
+    _scannerController?.dispose();
+    _scannerController = MobileScannerController(
+      detectionSpeed: DetectionSpeed.noDuplicates,
+      facing: CameraFacing.back,
+    );
     setState(() {
-      _carregando = true;
-      _provaId = id;
+      _processandoLeitura = false;
+      etapa = 1;
     });
+  }
+
+  Future<dynamic> _buscarFolhaAlunoPorCodigo({
+    required String codigoQr,
+    String? provaIdInformada,
+  }) async {
+    final uidAtual = _auth.currentUser?.uid;
+    if (uidAtual == null) return null;
+
+    final codigoLimpo = codigoQr.trim();
+    if (codigoLimpo.isEmpty) return null;
+
+    if (provaIdInformada != null && provaIdInformada.isNotEmpty) {
+      final snap = await _db
+          .collection('criarProvas')
+          .doc(provaIdInformada)
+          .collection('alunos')
+          .where('criadoPor', isEqualTo: uidAtual)
+          .where('codigo', isEqualTo: codigoLimpo)
+          .limit(1)
+          .get();
+
+      if (snap.docs.isNotEmpty) {
+        return {
+          'provaId': provaIdInformada,
+          'alunoDocId': snap.docs.first.id,
+          'dadosAluno': snap.docs.first.data(),
+        };
+      }
+    }
+
+    final provasSnap = await _db
+        .collection('criarProvas')
+        .where('criadoPor', isEqualTo: uidAtual)
+        .get();
+
+    for (final provaDoc in provasSnap.docs) {
+      final alunosSnap = await provaDoc.reference
+          .collection('alunos')
+          .where('criadoPor', isEqualTo: uidAtual)
+          .where('codigo', isEqualTo: codigoLimpo)
+          .limit(1)
+          .get();
+
+      if (alunosSnap.docs.isNotEmpty) {
+        return {
+          'provaId': provaDoc.id,
+          'alunoDocId': alunosSnap.docs.first.id,
+          'dadosAluno': alunosSnap.docs.first.data(),
+        };
+      }
+    }
+
+    return null;
+  }
+
+  Future<void> _aoDetectarQrCode(BarcodeCapture capture) async {
+    if (_processandoLeitura) return;
+
+    final barcodes = capture.barcodes;
+    if (barcodes.isEmpty || barcodes.first.rawValue == null) return;
+
+    final raw = barcodes.first.rawValue!.trim();
+    if (raw.isEmpty) return;
+
+    setState(() => _processandoLeitura = true);
+    await _scannerController?.stop();
 
     try {
-      final doc = await _db.collection('provas').doc(id).get();
+      String codigoLido = raw;
+      String? provaIdFromQr;
+      String? alunoIdFromQr;
+      var respostasDoQr = [];
 
-      if (!doc.exists) {
+      if (raw.startsWith('{')) {
+        final decoded = jsonDecode(raw) as Map<String, dynamic>;
+        codigoLido =
+            (decoded['codigo'] ?? decoded['provaId'] ?? decoded['id'] ?? '')
+                .toString()
+                .trim();
+        provaIdFromQr = decoded['provaId']?.toString();
+        alunoIdFromQr = decoded['alunoId']?.toString();
+
+        final rawRespostas = decoded['respostas'];
+        if (rawRespostas is List) {
+          for (final item in rawRespostas) {
+            respostasDoQr.add(item?.toString());
+          }
+        }
+      }
+
+      if (codigoLido.isEmpty) {
+        throw Exception('QR Code inválido: código não encontrado.');
+      }
+
+      final encontrada = await _buscarFolhaAlunoPorCodigo(
+        codigoQr: codigoLido,
+        provaIdInformada: provaIdFromQr ?? _provaSelecionadaId,
+      );
+
+      String provaIdFinal = provaIdFromQr ?? _provaSelecionadaId ?? codigoLido;
+      String? alunoDocIdFinal = alunoIdFromQr ?? _alunoSelecionadoId;
+      Map<String, dynamic>? dadosFolhaAluno;
+
+      if (encontrada != null) {
+        provaIdFinal = encontrada['provaId'].toString();
+        alunoDocIdFinal =
+            encontrada['alunoDocId']?.toString() ?? alunoDocIdFinal;
+        if (encontrada['dadosAluno'] is Map) {
+          dadosFolhaAluno = Map<String, dynamic>.from(
+            encontrada['dadosAluno'] as Map,
+          );
+        }
+      }
+
+      await _carregarEProcessarCorrecaoAutomatica(
+        provaId: provaIdFinal,
+        alunoId: alunoDocIdFinal,
+        dadosFolhaAluno: dadosFolhaAluno,
+        respostasCapturadas: respostasDoQr,
+      );
+    } catch (e) {
+      _mensagem(e.toString().replaceFirst('Exception: ', ''));
+      if (mounted) {
+        setState(() => _processandoLeitura = false);
+        await _scannerController?.start();
+      }
+    }
+  }
+
+  Future<void> _carregarEProcessarCorrecaoAutomatica({
+    required String provaId,
+    String? alunoId,
+    Map<String, dynamic>? dadosFolhaAluno,
+    List<dynamic> respostasCapturadas = const [],
+  }) async {
+    if (_uid.isEmpty) {
+      _mensagem('Usuário não autenticado. Faça login novamente.');
+      return;
+    }
+
+    if (_carregando) return;
+
+    setState(() => _carregando = true);
+
+    String normalizarResposta(dynamic valor, int quantidadeAlternativas) {
+      if (valor == null) return '';
+
+      final resposta = valor.toString().trim().toUpperCase();
+
+      if (resposta.isEmpty || resposta == '-1') return '';
+
+      final indice = int.tryParse(resposta);
+
+      if (indice != null) {
+        if (indice >= 0 && indice < quantidadeAlternativas) {
+          return String.fromCharCode(65 + indice);
+        }
+
+        return '';
+      }
+
+      if (RegExp(r'^[A-Z]$').hasMatch(resposta)) {
+        return resposta;
+      }
+
+      return resposta;
+    }
+
+    try {
+      final provaDoc = await _db.collection('criarProvas').doc(provaId).get();
+
+      if (!provaDoc.exists) {
         throw Exception('Prova não encontrada.');
       }
 
-      final dados = doc.data()!;
+      final dadosProva = provaDoc.data() ?? <String, dynamic>{};
 
-      final ids = List<String>.from(dados['questoesIds'] ?? []);
-      if (ids.isEmpty) {
-        throw Exception('Esta prova não possui questões vinculadas.');
+      final rawQuestoesIds =
+          dadosProva['questoesIds'] ?? dadosProva['questoes'];
+
+      final List<dynamic> listaQuestoes = rawQuestoesIds is List
+          ? rawQuestoesIds
+          : [];
+
+      if (listaQuestoes.isEmpty) {
+        throw Exception('A prova não possui questões vinculadas.');
       }
 
-      final gabarito = Map<String, dynamic>.from(dados['gabarito'] ?? {});
-      final questoes = <Map<String, dynamic>>[];
+      final Map<String, dynamic> gabaritoMap = {};
 
-      for (final questaoId in ids) {
-        final qDoc = await _db.collection('questoes').doc(questaoId).get();
+      final rawGabarito = dadosProva['gabarito'];
 
-        if (!qDoc.exists) continue;
-
-        final q = qDoc.data()!;
-        final alternativas = List<String>.from(q['alternativas'] ?? []);
-        final corretas = List<int>.from(q['corretas'] ?? []);
-        final letraCorreta =
-            corretas.isNotEmpty &&
-                corretas.first >= 0 &&
-                corretas.first < alternativas.length
-            ? String.fromCharCode(65 + corretas.first)
-            : '';
-
-        questoes.add({
-          'id': qDoc.id,
-          'enunciado': q['enunciado'] ?? '',
-          'materia': q['materia'] ?? '',
-          'assunto': q['assunto'] ?? '',
-          'alternativas': alternativas,
-          'gabarito': (gabarito[qDoc.id] ?? letraCorreta).toString(),
+      if (rawGabarito is Map) {
+        rawGabarito.forEach((chave, valor) {
+          gabaritoMap[chave.toString()] = valor;
         });
       }
 
-      if (questoes.isEmpty) {
-        throw Exception('Não foi possível carregar as questões desta prova.');
+      final List<Map<String, dynamic>> questoesCarregadas = [];
+
+      for (int i = 0; i < listaQuestoes.length; i++) {
+        final item = listaQuestoes[i];
+
+        late Map<String, dynamic> questao;
+        late String questaoId;
+
+        if (item is Map) {
+          questao = Map<String, dynamic>.from(item);
+
+          questaoId =
+              (questao['id'] ??
+                      questao['questaoId'] ??
+                      questao['codigo'] ??
+                      'questao_$i')
+                  .toString();
+        } else {
+          questaoId = item.toString();
+
+          final qDoc = await _db.collection('questoes').doc(questaoId).get();
+
+          if (!qDoc.exists) {
+            throw Exception('Questão $questaoId não encontrada.');
+          }
+
+          questao = qDoc.data() ?? <String, dynamic>{};
+          questaoId = qDoc.id;
+        }
+
+        final rawAlternativas = questao['alternativas'];
+
+        final List<String> alternativas = rawAlternativas is List
+            ? rawAlternativas.map((e) => e.toString()).toList()
+            : [];
+
+        if (alternativas.isEmpty) {
+          throw Exception('A questão ${i + 1} não possui alternativas.');
+        }
+
+        final rawCorretas = questao['corretas'];
+        final rawCorreta = questao['correta'];
+
+        dynamic respostaCorreta = gabaritoMap[questaoId];
+
+        respostaCorreta ??= gabaritoMap[questao['codigo']?.toString()];
+
+        respostaCorreta ??= questao['gabarito'];
+
+        respostaCorreta ??= rawCorretas is List && rawCorretas.isNotEmpty
+            ? rawCorretas.first
+            : rawCorreta;
+
+        if (respostaCorreta == null) {
+          throw Exception(
+            'Não foi possível encontrar o gabarito da questão ${i + 1}.',
+          );
+        }
+
+        final gabarito = normalizarResposta(
+          respostaCorreta,
+          alternativas.length,
+        );
+
+        if (gabarito.isEmpty) {
+          throw Exception('Gabarito inválido na questão ${i + 1}.');
+        }
+
+        questoesCarregadas.add({
+          'id': questaoId,
+          'enunciado': (questao['enunciado'] ?? '').toString(),
+          'alternativas': alternativas,
+          'gabarito': gabarito,
+        });
       }
 
-      if (!mounted) return;
+      final dadosFolha = dadosFolhaAluno ?? <String, dynamic>{};
 
-      setState(() {
-        _prova = dados;
-        _questoes = questoes;
-        _respostas = List<String?>.filled(questoes.length, null);
-        _codigoController.text = (dados['codigoQr'] ?? id).toString();
-        etapa = 1;
-      });
-    } catch (e) {
-      _mensagem(e.toString().replaceFirst('Exception: ', ''));
-    } finally {
-      if (mounted) setState(() => _carregando = false);
-    }
-  }
+      final turmaId = (dadosFolha['turmaId'] ?? dadosProva['turmaId'] ?? '')
+          .toString();
 
-  Future<void> _validarCodigo() async {
-    final codigo = _codigoController.text.trim();
+      String turmaNomeFinal =
+          (dadosFolha['turmaNome'] ??
+                  dadosProva['turmaNome'] ??
+                  dadosProva['turma'] ??
+                  '')
+              .toString();
 
-    if (codigo.isEmpty || _provaId == null || _prova == null) {
-      _mensagem('Selecione uma prova e informe o código.');
-      return;
-    }
+      String disciplinaFinal =
+          (dadosProva['disciplina'] ??
+                  dadosProva['disciplinaNome'] ??
+                  dadosProva['materia'] ??
+                  '')
+              .toString();
 
-    final codigoEsperado = (_prova!['codigoQr'] ?? _provaId).toString();
+      if (turmaNomeFinal.isEmpty && turmaId.isNotEmpty) {
+        final turmaDoc = await _db.collection('turmas').doc(turmaId).get();
 
-    if (codigo != codigoEsperado && codigo != _provaId) {
-      _mensagem('O código informado não corresponde à prova selecionada.');
-      return;
-    }
+        if (turmaDoc.exists) {
+          final dadosTurma = turmaDoc.data() ?? {};
 
-    setState(() => etapa = 2);
-  }
+          turmaNomeFinal =
+              (dadosTurma['nome'] ??
+                      dadosTurma['turmaNome'] ??
+                      dadosTurma['nomeTurma'] ??
+                      '')
+                  .toString();
+        }
+      }
 
-  void _irParaRespostas() {
-    if (_questoes.any((q) => (q['gabarito'] as String).isEmpty)) {
-      _mensagem('Existe questão sem alternativa correta definida.');
-      return;
-    }
+      String nomeAlunoFinal = (dadosFolha['alunoNome'] ?? '').toString();
 
-    setState(() => etapa = 3);
-  }
+      String matriculaFinal = (dadosFolha['matricula'] ?? '').toString();
 
-  Future<void> _salvarCorrecao() async {
-    if (_uid.isEmpty) {
-      _mensagem('Faça login para salvar a correção.');
-      return;
-    }
+      if (nomeAlunoFinal.isEmpty && alunoId != null && alunoId.isNotEmpty) {
+        if (turmaId.isNotEmpty) {
+          final docAluno = await _db
+              .collection('turmas')
+              .doc(turmaId)
+              .collection('alunos')
+              .doc(alunoId)
+              .get();
 
-    if (_provaId == null || _prova == null || _questoes.isEmpty) {
-      _mensagem('Selecione uma prova válida.');
-      return;
-    }
+          if (docAluno.exists) {
+            final dadosAluno = docAluno.data() ?? {};
 
-    if (_nomeController.text.trim().isEmpty) {
-      _mensagem('Informe o nome do aluno.');
-      return;
-    }
+            nomeAlunoFinal = (dadosAluno['nome'] ?? 'Aluno').toString();
 
-    if (_respostas.length != _questoes.length) {
-      _mensagem('Confira as respostas antes de continuar.');
-      return;
-    }
+            matriculaFinal = (dadosAluno['matricula'] ?? alunoId).toString();
+          }
+        }
 
-    setState(() => _salvando = true);
+        if (nomeAlunoFinal.isEmpty) {
+          nomeAlunoFinal = 'Aluno ($alunoId)';
+          matriculaFinal = alunoId;
+        }
+      }
 
-    try {
-      var acertos = 0;
-      var emBranco = 0;
+      if (nomeAlunoFinal.isEmpty) {
+        nomeAlunoFinal = 'Aluno não identificado';
+      }
 
-      for (var i = 0; i < _questoes.length; i++) {
-        if (_respostas[i] == null) {
+      final List<dynamic> respostasOriginais = respostasCapturadas.isNotEmpty
+          ? respostasCapturadas
+          : (dadosFolha['gabarito'] is List
+                ? List<dynamic>.from(dadosFolha['gabarito'])
+                : []);
+
+      if (respostasOriginais.isEmpty) {
+        throw Exception(
+          'Nenhuma resposta encontrada. Leia o QR Code da folha do aluno.',
+        );
+      }
+
+      final List<String> respostasFinais = List.generate(
+        questoesCarregadas.length,
+        (i) {
+          if (i >= respostasOriginais.length) {
+            return '';
+          }
+
+          return normalizarResposta(
+            respostasOriginais[i],
+            (questoesCarregadas[i]['alternativas'] as List).length,
+          );
+        },
+      );
+
+      int acertos = 0;
+      int emBranco = 0;
+
+      for (int i = 0; i < questoesCarregadas.length; i++) {
+        final marcada = respostasFinais[i];
+        final correta = questoesCarregadas[i]['gabarito'].toString();
+
+        if (marcada.isEmpty) {
           emBranco++;
-        } else if (_respostas[i] == _questoes[i]['gabarito']) {
+        } else if (marcada == correta) {
           acertos++;
         }
       }
 
-      final total = _questoes.length;
+      final total = questoesCarregadas.length;
       final erros = total - acertos - emBranco;
-      final nota = total == 0 ? 0.0 : (acertos / total) * 10;
-      final respostasSalvas = List.generate(total, (i) {
+      final nota = (acertos / total) * 10.0;
+      final aproveitamento = acertos / total;
+
+      final respostasDetalhadas = List.generate(total, (i) {
+        final marcada = respostasFinais[i];
+        final gabarito = questoesCarregadas[i]['gabarito'].toString();
+
         return {
-          'questaoId': _questoes[i]['id'],
+          'questaoId': questoesCarregadas[i]['id'],
           'numero': i + 1,
-          'marcada': _respostas[i],
-          'gabarito': _questoes[i]['gabarito'],
-          'correta':
-              _respostas[i] != null &&
-              _respostas[i] == _questoes[i]['gabarito'],
+          'marcada': marcada.isEmpty ? null : marcada,
+          'gabarito': gabarito,
+          'correta': marcada.isNotEmpty && marcada == gabarito,
         };
       });
 
-      final correcao = _db.collection('correcoes').doc();
+      final usuario = _auth.currentUser;
 
-      await correcao.set({
-        'professorId': _uid,
-        'provaId': _provaId,
-        'tituloProva': _prova!['titulo'] ?? 'Prova',
-        'disciplina': _prova!['disciplina'] ?? '',
-        'turma': _prova!['turma'] ?? '',
-        'alunoNome': _nomeController.text.trim(),
-        'matricula': _matriculaController.text.trim(),
-        'respostas': respostasSalvas,
+      if (usuario == null) {
+        throw Exception('Usuário não autenticado.');
+      }
+
+      final dadosCorrecao = {
+        'professorId': usuario.uid,
+        'criadoPor': usuario.uid,
+        'provaId': provaId,
+        'tituloProva': dadosProva['titulo'] ?? dadosProva['nome'] ?? 'Prova',
+        'turma': turmaNomeFinal,
+        'turmaNome': turmaNomeFinal,
+        'disciplina': disciplinaFinal,
+        'turmaId': turmaId,
+        'alunoId': alunoId ?? '',
+        'alunoNome': nomeAlunoFinal,
+        'matricula': matriculaFinal,
+        'versao': dadosFolha['versao'] ?? 1,
+        'respostas': respostasDetalhadas,
         'totalQuestoes': total,
         'acertos': acertos,
         'erros': erros,
         'emBranco': emBranco,
         'nota': nota,
-        'aproveitamento': acertos / total,
+        'aproveitamento': aproveitamento,
         'dataCorrecao': FieldValue.serverTimestamp(),
-      });
+      };
 
-      await _db.collection('provas').doc(_provaId).update({
-        'ultimaCorrecaoEm': FieldValue.serverTimestamp(),
-      });
+      final correcaoRef = await _db.collection('correcoes').add(dadosCorrecao);
 
-      if (!mounted) return;
+      final correcaoSalva = await correcaoRef.get();
 
-      setState(() {
-        etapa = 4;
-      });
-    } catch (e) {
-      _mensagem('Não foi possível salvar a correção: $e');
-    } finally {
-      if (mounted) setState(() => _salvando = false);
-    }
-  }
-
-  Future<void> _criarProva() async {
-    final nomeController = TextEditingController();
-    final disciplinaController = TextEditingController();
-    final turmaController = TextEditingController();
-    final selecionadas = <String>{};
-
-    final confirmou = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, atualizarDialogo) => AlertDialog(
-          backgroundColor: fundo,
-          title: const Text('Cadastrar prova'),
-          content: SizedBox(
-            width: 520,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: nomeController,
-                    decoration: const InputDecoration(
-                      labelText: 'Título da prova',
-                    ),
-                  ),
-                  TextField(
-                    controller: disciplinaController,
-                    decoration: const InputDecoration(labelText: 'Disciplina'),
-                  ),
-                  TextField(
-                    controller: turmaController,
-                    decoration: const InputDecoration(labelText: 'Turma'),
-                  ),
-                  const SizedBox(height: 18),
-                  const Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      'Selecione as questões',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                  SizedBox(
-                    height: 240,
-                    child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                      stream: _db
-                          .collection('questoes')
-                          .where('professorId', isEqualTo: _uid)
-                          .snapshots(),
-                      builder: (context, snapshot) {
-                        if (snapshot.hasError) {
-                          return const Center(
-                            child: Text('Erro ao carregar questões.'),
-                          );
-                        }
-
-                        if (!snapshot.hasData) {
-                          return const Center(
-                            child: CircularProgressIndicator(),
-                          );
-                        }
-
-                        final docs = snapshot.data!.docs;
-
-                        if (docs.isEmpty) {
-                          return const Center(
-                            child: Text('Você ainda não cadastrou questões.'),
-                          );
-                        }
-
-                        return ListView.builder(
-                          itemCount: docs.length,
-                          itemBuilder: (context, index) {
-                            final doc = docs[index];
-                            final dados = doc.data();
-                            final titulo = (dados['enunciado'] ?? 'Questão')
-                                .toString();
-
-                            return CheckboxListTile(
-                              value: selecionadas.contains(doc.id),
-                              activeColor: verde,
-                              controlAffinity: ListTileControlAffinity.leading,
-                              title: Text(
-                                titulo,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              subtitle: Text(
-                                '${dados['materia'] ?? ''} • ${dados['assunto'] ?? ''}',
-                              ),
-                              onChanged: (valor) {
-                                atualizarDialogo(() {
-                                  if (valor == true) {
-                                    selecionadas.add(doc.id);
-                                  } else {
-                                    selecionadas.remove(doc.id);
-                                  }
-                                });
-                              },
-                            );
-                          },
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text('Cancelar'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(dialogContext, true),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: verde,
-                foregroundColor: Colors.white,
-              ),
-              child: const Text('Criar prova'),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    if (confirmou != true) return;
-
-    if (nomeController.text.trim().isEmpty ||
-        disciplinaController.text.trim().isEmpty ||
-        turmaController.text.trim().isEmpty ||
-        selecionadas.isEmpty) {
-      _mensagem('Preencha os campos e selecione ao menos uma questão.');
-      return;
-    }
-
-    try {
-      final gabarito = <String, String>{};
-
-      for (final id in selecionadas) {
-        final doc = await _db.collection('questoes').doc(id).get();
-
-        if (!doc.exists) continue;
-
-        final dados = doc.data()!;
-        final corretas = List<int>.from(dados['corretas'] ?? []);
-        final alternativas = List<String>.from(dados['alternativas'] ?? []);
-
-        if (corretas.isEmpty ||
-            corretas.first < 0 ||
-            corretas.first >= alternativas.length) {
-          throw Exception(
-            'Uma das questões selecionadas não tem alternativa correta válida.',
-          );
-        }
-
-        gabarito[id] = String.fromCharCode(65 + corretas.first);
+      if (!correcaoSalva.exists) {
+        throw Exception('Não foi possível confirmar o salvamento da correção.');
       }
 
-      final provaRef = _db.collection('provas').doc();
-
-      await provaRef.set({
-        'professorId': _uid,
-        'titulo': nomeController.text.trim(),
-        'disciplina': disciplinaController.text.trim(),
-        'turma': turmaController.text.trim(),
-        'questoesIds': selecionadas.toList(),
-        'gabarito': gabarito,
-        'codigoQr': provaRef.id,
-        'criadoEm': FieldValue.serverTimestamp(),
-      });
-
       if (!mounted) return;
-
-      _mensagem('Prova cadastrada. Código: ${provaRef.id}');
-      await _carregarProva(provaRef.id);
+      setState(() {
+        _provaSelecionadaId = provaId;
+        _prova = dadosProva;
+        _turmaNome = turmaNomeFinal;
+        _disciplinaNome = disciplinaFinal;
+        _questoes = questoesCarregadas;
+        _respostasLidas = respostasFinais;
+        _alunoNome = nomeAlunoFinal;
+        _alunoMatricula = matriculaFinal;
+        etapa = 2;
+      });
+    } on FirebaseException catch (e) {
+      _mensagem('Erro Firebase: ${e.code} - ${e.message}');
     } catch (e) {
-      _mensagem('Não foi possível cadastrar a prova: $e');
+      _mensagem(e.toString().replaceFirst('Exception: ', ''));
     } finally {
-      nomeController.dispose();
-      disciplinaController.dispose();
-      turmaController.dispose();
+      if (mounted) {
+        setState(() {
+          _carregando = false;
+          _processandoLeitura = false;
+        });
+      }
     }
   }
 
-  void _mensagem(String mensagem) {
+  void _mensagem(String msg) {
     if (!mounted) return;
-
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(mensagem)));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
   void _reiniciar() {
+    _scannerController?.dispose();
+    _scannerController = null;
+
     setState(() {
       etapa = 0;
-      _provaId = null;
+      _provaSelecionadaId = null;
       _prova = null;
       _questoes = [];
-      _respostas = [];
-      _codigoController.clear();
-      _nomeController.clear();
-      _matriculaController.clear();
+      _respostasLidas = [];
+      _alunoSelecionadoId = null;
+      _alunoNome = '';
+      _alunoMatricula = '';
+      _dadosFolhaSelecionada = null;
+      _mostrarSelecaoAluno = false;
+      _processandoLeitura = false;
+      _turmaNome = '';
+      _disciplinaNome = '';
     });
   }
 
@@ -449,65 +570,88 @@ class _CorrigirState extends State<Corrigir> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: fundo,
-      drawer: const DrawerNav(),
-      appBar: const PreferredSize(
-        preferredSize: Size.fromHeight(60),
-        child: Header(),
-      ),
-      bottomNavigationBar: Navegar(
-        onVoltar: _voltar,
-        onAvancar: null, // as etapas avançam pelos botões da própria tela
-      ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 900),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const MenuTitle(title: 'Correção de provas', fontSize: 28),
-                  const SizedBox(height: 16),
-                  _buildConteudo(),
-                ],
+        child: Column(
+          children: [
+            const Header(),
+            Expanded(
+              child: Scaffold(
+                drawer: const DrawerNav(),
+                backgroundColor: fundo,
+                appBar: AppBar(
+                  backgroundColor: fundo,
+                  foregroundColor: verde,
+                  elevation: 0,
+                  title: const Text('Correção de provas'),
+                  leading: Builder(
+                    builder: (context) => IconButton(
+                      icon: const Icon(Icons.menu),
+                      onPressed: () => Scaffold.of(context).openDrawer(),
+                    ),
+                  ),
+                ),
+                body: SingleChildScrollView(
+                  padding: const EdgeInsets.all(24),
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 900),
+                      child: _buildConteudo(),
+                    ),
+                  ),
+                ),
               ),
             ),
-          ),
+            const Navegar(onVoltar: null, onAvancar: null),
+            const SizedBox(height: 16),
+          ],
         ),
       ),
     );
   }
 
   Widget _buildConteudo() {
-    if (etapa == 0) return _buildInicio();
-    if (etapa == 4) return _buildResultado();
     if (_carregando) {
       return const Padding(
         padding: EdgeInsets.all(60),
-        child: Center(child: CircularProgressIndicator()),
+        child: Column(
+          children: [
+            CircularProgressIndicator(color: verde),
+            SizedBox(height: 16),
+            Text('Processando gabarito e salvando nota no Firebase...'),
+          ],
+        ),
       );
     }
 
-    return Column(
-      children: [
-        _buildProgresso(),
-        const SizedBox(height: 30),
-        if (etapa == 1) _buildIdentificacao(),
-        if (etapa == 2) _buildGabarito(),
-        if (etapa == 3) _buildRespostas(),
-      ],
-    );
+    if (etapa == 1) return _buildLeitorQrCode();
+    if (etapa == 2) return _buildResultado();
+    return _buildInicio();
   }
 
   Widget _buildInicio() {
+    if (_uid.isEmpty) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(32),
+        decoration: BoxDecoration(
+          color: cinza,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: const Text(
+          'Faça login para acessar e corrigir suas provas.',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 16, color: texto),
+        ),
+      );
+    }
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(32),
       decoration: BoxDecoration(
         color: cinza,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: verde.withOpacity(0.25)),
+        border: Border.all(color: verde.withValues(alpha: 0.25)),
       ),
       child: Column(
         children: [
@@ -518,18 +662,14 @@ class _CorrigirState extends State<Corrigir> {
               color: verde,
               borderRadius: BorderRadius.circular(20),
             ),
-            child: const Icon(
-              Icons.assignment_turned_in_outlined,
-              size: 50,
-              color: fundo,
-            ),
+            child: const Icon(Icons.qr_code_scanner, size: 50, color: fundo),
           ),
           const SizedBox(height: 22),
           const Text(
-            'Correção de provas',
+            'Correção automática',
             textAlign: TextAlign.center,
             style: TextStyle(
-              fontSize: 36,
+              fontSize: 34,
               fontFamily: 'Oswald',
               fontWeight: FontWeight.w800,
               color: verde,
@@ -537,81 +677,244 @@ class _CorrigirState extends State<Corrigir> {
           ),
           const SizedBox(height: 10),
           const Text(
-            'Selecione uma prova cadastrada ou crie uma usando suas questões.',
+            'Aponte a câmera para o QR Code da folha de respostas para identificar a prova, o aluno e calcular a nota automaticamente.',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 16, color: texto),
           ),
           const SizedBox(height: 28),
+          SizedBox(
+            width: double.infinity,
+            height: 56,
+            child: ElevatedButton.icon(
+              onPressed: _iniciarCamera,
+              icon: const Icon(Icons.camera_alt_outlined, size: 24),
+              label: const Text(
+                'Escanear QR Code da Prova',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              style: _estiloBotao(),
+            ),
+          ),
+          const SizedBox(height: 28),
+          const Divider(),
+          const SizedBox(height: 16),
+          const Text(
+            'Ou selecione uma prova cadastrada no sistema:',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: texto,
+            ),
+          ),
+          const SizedBox(height: 14),
           StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
             stream: _db
-                .collection('provas')
-                .where('professorId', isEqualTo: _uid)
+                .collection('criarProvas')
+                .where('criadoPor', isEqualTo: _uid)
                 .snapshots(),
             builder: (context, snapshot) {
               if (snapshot.hasError) {
-                return const Text('Erro ao carregar provas do Firebase.');
+                return Text('Erro ao carregar provas: ${snapshot.error}');
               }
 
               if (!snapshot.hasData) {
-                return const CircularProgressIndicator();
+                return const CircularProgressIndicator(color: verde);
               }
 
               final docs = snapshot.data!.docs;
 
+              if (docs.isEmpty) {
+                return const Text(
+                  'Nenhuma prova cadastrada. Crie uma prova na aba "Criar Prova".',
+                  textAlign: TextAlign.center,
+                );
+              }
+
+              final valorValido = docs.any((d) => d.id == _provaSelecionadaId)
+                  ? _provaSelecionadaId
+                  : null;
+
               return Column(
                 children: [
-                  if (docs.isNotEmpty)
-                    DropdownButtonFormField<String>(
-                      value: docs.any((d) => d.id == _provaId)
-                          ? _provaId
-                          : null,
-                      isExpanded: true,
-                      decoration: InputDecoration(
-                        labelText: 'Prova cadastrada',
-                        filled: true,
-                        fillColor: fundo,
-                        border: OutlineInputBorder(
+                  DropdownButtonFormField<String>(
+                    initialValue: valorValido,
+                    isExpanded: true,
+                    decoration: InputDecoration(
+                      labelText: 'Prova cadastrada',
+                      filled: true,
+                      fillColor: fundo,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    items: docs.map((doc) {
+                      final d = doc.data();
+                      final titulo =
+                          d['titulo'] ?? d['nome'] ?? 'Prova sem título';
+                      final turma = d['turma'] ?? d['turmaNome'] ?? '';
+                      final disciplina = d['disciplina'] ?? d['materia'] ?? '';
+
+                      return DropdownMenuItem<String>(
+                        value: doc.id,
+                        child: Text(
+                          '$titulo'
+                          '${disciplina.toString().isNotEmpty ? " • $disciplina" : ""}'
+                          '${turma.toString().isNotEmpty ? " ($turma)" : ""}',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: (id) {
+                      setState(() {
+                        _provaSelecionadaId = id;
+                        _alunoSelecionadoId = null;
+                        _dadosFolhaSelecionada = null;
+                        _mostrarSelecaoAluno = false;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 14),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: OutlinedButton.icon(
+                      onPressed: valorValido == null
+                          ? null
+                          : () {
+                              setState(() {
+                                _mostrarSelecaoAluno = true;
+                                _alunoSelecionadoId = null;
+                                _dadosFolhaSelecionada = null;
+                              });
+                            },
+                      icon: const Icon(Icons.people_outline),
+                      label: const Text('Corrigir Prova Selecionada'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: verde,
+                        side: const BorderSide(color: verde, width: 1.5),
+                        shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10),
                         ),
                       ),
-                      items: docs.map((doc) {
-                        final dados = doc.data();
-                        return DropdownMenuItem<String>(
-                          value: doc.id,
-                          child: Text(
-                            '${dados['titulo'] ?? 'Prova'} • ${dados['turma'] ?? ''}',
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        );
-                      }).toList(),
-                      onChanged: (id) => setState(() => _provaId = id),
-                    )
-                  else
-                    const Text('Nenhuma prova cadastrada ainda.'),
-                  const SizedBox(height: 18),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 52,
-                    child: ElevatedButton.icon(
-                      onPressed: _criarProva,
-                      icon: const Icon(Icons.add),
-                      label: const Text('Cadastrar prova'),
-                      style: _estiloBotao(),
                     ),
                   ),
-                  if (docs.isNotEmpty) ...[
+                  if (_mostrarSelecaoAluno && valorValido != null) ...[
+                    const SizedBox(height: 22),
+                    const Divider(),
                     const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 52,
-                      child: ElevatedButton.icon(
-                        onPressed: _provaId == null
-                            ? null
-                            : () => _carregarProva(_provaId!),
-                        icon: const Icon(Icons.play_arrow),
-                        label: const Text('Iniciar correção'),
-                        style: _estiloBotao(),
+                    const Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Selecione o aluno que deseja corrigir:',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: verde,
+                        ),
                       ),
+                    ),
+                    const SizedBox(height: 12),
+                    StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                      stream: _db
+                          .collection('criarProvas')
+                          .doc(valorValido)
+                          .collection('alunos')
+                          .where('criadoPor', isEqualTo: _uid)
+                          .snapshots(),
+                      builder: (context, alunoSnapshot) {
+                        if (alunoSnapshot.hasError) {
+                          return Text(
+                            'Erro ao carregar alunos: ${alunoSnapshot.error}',
+                          );
+                        }
+
+                        if (!alunoSnapshot.hasData) {
+                          return const Padding(
+                            padding: EdgeInsets.all(16),
+                            child: CircularProgressIndicator(color: verde),
+                          );
+                        }
+
+                        final alunos = alunoSnapshot.data!.docs;
+
+                        if (alunos.isEmpty) {
+                          return const Padding(
+                            padding: EdgeInsets.all(16),
+                            child: Text(
+                              'Nenhum aluno cadastrado para esta prova.',
+                              textAlign: TextAlign.center,
+                            ),
+                          );
+                        }
+
+                        final alunoValido =
+                            alunos.any((doc) => doc.id == _alunoSelecionadoId)
+                            ? _alunoSelecionadoId
+                            : null;
+
+                        return Column(
+                          children: [
+                            DropdownButtonFormField<String>(
+                              initialValue: alunoValido,
+                              isExpanded: true,
+                              decoration: InputDecoration(
+                                labelText: 'Aluno',
+                                filled: true,
+                                fillColor: fundo,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                              items: alunos.map((doc) {
+                                final dados = doc.data();
+                                final nome =
+                                    dados['alunoNome'] ?? 'Aluno sem nome';
+                                final codigo = dados['codigo'] ?? '';
+
+                                return DropdownMenuItem<String>(
+                                  value: doc.id,
+                                  child: Text(
+                                    '$nome${codigo.toString().isNotEmpty ? " • $codigo" : ""}',
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                );
+                              }).toList(),
+                              onChanged: (id) {
+                                if (id == null) return;
+
+                                final aluno = alunos.firstWhere(
+                                  (doc) => doc.id == id,
+                                );
+
+                                setState(() {
+                                  _alunoSelecionadoId = aluno.id;
+                                  _dadosFolhaSelecionada = aluno.data();
+                                });
+                              },
+                            ),
+                            const SizedBox(height: 16),
+                            SizedBox(
+                              width: double.infinity,
+                              height: 52,
+                              child: ElevatedButton.icon(
+                                onPressed: alunoValido == null
+                                    ? null
+                                    : () {
+                                        _carregarEProcessarCorrecaoAutomatica(
+                                          provaId: valorValido,
+                                          alunoId: _alunoSelecionadoId,
+                                          dadosFolhaAluno:
+                                              _dadosFolhaSelecionada,
+                                        );
+                                      },
+                                icon: const Icon(Icons.check_circle_outline),
+                                label: const Text('Corrigir Aluno'),
+                                style: _estiloBotao(),
+                              ),
+                            ),
+                          ],
+                        );
+                      },
                     ),
                   ],
                 ],
@@ -623,235 +926,65 @@ class _CorrigirState extends State<Corrigir> {
     );
   }
 
-  Widget _buildProgresso() {
-    return Row(
-      children: List.generate(etapas.length, (i) {
-        final concluida = i < etapa;
-
-        return Expanded(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 5),
-            child: Column(
-              children: [
-                Container(
-                  height: 7,
-                  decoration: BoxDecoration(
-                    color: concluida ? verde : Colors.grey.shade400,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  etapas[i],
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: concluida ? verde : Colors.grey.shade700,
-                    fontWeight: concluida ? FontWeight.bold : FontWeight.normal,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      }),
-    );
-  }
-
-  Widget _painel({
-    required IconData icone,
-    required String titulo,
-    required String descricao,
-    required Widget conteudo,
-  }) {
+  Widget _buildLeitorQrCode() {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: cinza,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: verde.withOpacity(0.2)),
       ),
       child: Column(
         children: [
-          Container(
-            width: 82,
-            height: 82,
-            decoration: BoxDecoration(
-              color: verde,
-              borderRadius: BorderRadius.circular(18),
-            ),
-            child: Icon(icone, color: fundo, size: 45),
-          ),
-          const SizedBox(height: 20),
-          Text(
-            titulo,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 28,
+          const Text(
+            'Escaneando Folha de Respostas',
+            style: TextStyle(
+              fontSize: 24,
               fontFamily: 'Oswald',
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.bold,
               color: verde,
             ),
           ),
           const SizedBox(height: 8),
-          Text(
-            descricao,
+          const Text(
+            'Posicione o QR Code impresso no gabarito dentro da moldura.',
             textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 15, color: texto),
+            style: TextStyle(color: texto),
           ),
-          const SizedBox(height: 24),
-          conteudo,
-        ],
-      ),
-    );
-  }
-
-  Widget _buildIdentificacao() {
-    return _painel(
-      icone: Icons.qr_code_scanner,
-      titulo: 'Identificar prova',
-      descricao: 'Confira o código da prova selecionada.',
-      conteudo: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _campo(
-            controller: _codigoController,
-            label: 'Código da prova',
-            icone: Icons.qr_code,
+          const SizedBox(height: 20),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: SizedBox(
+              height: 340,
+              width: double.infinity,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  if (_scannerController != null && !kIsWeb)
+                    MobileScanner(
+                      controller: _scannerController!,
+                      onDetect: _aoDetectarQrCode,
+                    ),
+                  Container(
+                    width: 220,
+                    height: 220,
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.greenAccent, width: 3),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
-          const SizedBox(height: 18),
-          _botao('Validar código', Icons.check, _validarCodigo),
-          TextButton(
+          const SizedBox(height: 20),
+          TextButton.icon(
             onPressed: _reiniciar,
-            child: const Text('Cancelar correção'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildGabarito() {
-    return _painel(
-      icone: Icons.fact_check_outlined,
-      titulo: 'Conferir gabarito',
-      descricao: 'Confira as alternativas corretas carregadas do Firebase.',
-      conteudo: Column(
-        children: [
-          ...List.generate(_questoes.length, (i) {
-            final q = _questoes[i];
-            return Card(
-              color: fundo,
-              child: ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: verde,
-                  foregroundColor: Colors.white,
-                  child: Text('${i + 1}'),
-                ),
-                title: Text(
-                  q['enunciado'].toString(),
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                subtitle: Text('Gabarito: ${q['gabarito']}'),
-              ),
-            );
-          }),
-          const SizedBox(height: 16),
-          _botao(
-            'Continuar para respostas',
-            Icons.arrow_forward,
-            _irParaRespostas,
-          ),
-          TextButton(
-            onPressed: () => setState(() => etapa = 1),
-            child: const Text('Voltar'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildRespostas() {
-    return _painel(
-      icone: Icons.description_outlined,
-      titulo: 'Respostas do aluno',
-      descricao: 'Informe os dados do aluno e marque a alternativa de cada questão. Deixe sem seleção quando estiver em branco.',
-      conteudo: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _campo(
-            controller: _nomeController,
-            label: 'Nome do aluno',
-            icone: Icons.person_outline,
-          ),
-          const SizedBox(height: 12),
-          _campo(
-            controller: _matriculaController,
-            label: 'Matrícula (opcional)',
-            icone: Icons.badge_outlined,
-          ),
-          const SizedBox(height: 18),
-          ...List.generate(_questoes.length, (i) {
-            final q = _questoes[i];
-            final alternativas = List<String>.from(q['alternativas'] ?? []);
-
-            return Card(
-              color: fundo,
-              margin: const EdgeInsets.only(bottom: 12),
-              child: Padding(
-                padding: const EdgeInsets.all(14),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Questão ${i + 1}',
-                      style: const TextStyle(
-                        color: verde,
-                        fontSize: 17,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(q['enunciado'].toString()),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      children: List.generate(alternativas.length, (j) {
-                        final letra = String.fromCharCode(65 + j);
-                        return ChoiceChip(
-                          label: Text(letra),
-                          selected: _respostas[i] == letra,
-                          selectedColor: verde.withOpacity(0.25),
-                          onSelected: (selecionado) {
-                            setState(() {
-                              _respostas[i] = selecionado ? letra : null;
-                            });
-                          },
-                        );
-                      }),
-                    ),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: TextButton(
-                        onPressed: () => setState(() => _respostas[i] = null),
-                        child: const Text('Marcar em branco'),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }),
-          const SizedBox(height: 10),
-          _botao(
-            _salvando ? 'Salvando...' : 'Corrigir e salvar resultado',
-            Icons.save_outlined,
-            _salvando ? null : _salvarCorrecao,
-          ),
-          TextButton(
-            onPressed: () => setState(() => etapa = 2),
-            child: const Text('Voltar ao gabarito'),
+            icon: const Icon(Icons.close, color: verde),
+            label: const Text(
+              'Cancelar leitura',
+              style: TextStyle(color: verde),
+            ),
           ),
         ],
       ),
@@ -859,21 +992,22 @@ class _CorrigirState extends State<Corrigir> {
   }
 
   Widget _buildResultado() {
-    var acertos = 0;
-    var emBranco = 0;
+    int acertos = 0;
+    int emBranco = 0;
 
-    for (var i = 0; i < _questoes.length; i++) {
-      if (_respostas[i] == null) {
+    for (int i = 0; i < _questoes.length; i++) {
+      final resp = _respostasLidas[i];
+      if (resp == null || resp.toString().isEmpty) {
         emBranco++;
-      } else if (_respostas[i] == _questoes[i]['gabarito']) {
+      } else if (resp.toString() == _questoes[i]['gabarito'].toString()) {
         acertos++;
       }
     }
 
     final total = _questoes.length;
     final erros = total - acertos - emBranco;
-    final nota = total == 0 ? 0.0 : acertos / total * 10;
-    final aproveitamento = total == 0 ? 0 : acertos / total * 100;
+    final nota = total == 0 ? 0.0 : (acertos / total) * 10;
+    final aproveitamento = total == 0 ? 0 : (acertos / total) * 100;
 
     return Column(
       children: [
@@ -897,12 +1031,16 @@ class _CorrigirState extends State<Corrigir> {
             color: verde,
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 6),
         Text(
-          _nomeController.text.trim(),
-          style: const TextStyle(fontSize: 18, color: texto),
+          'Nota salva automaticamente no Firebase',
+          style: TextStyle(
+            fontSize: 14,
+            color: verde.withValues(alpha: 0.85),
+            fontWeight: FontWeight.w600,
+          ),
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 20),
         Container(
           width: double.infinity,
           padding: const EdgeInsets.all(24),
@@ -985,7 +1123,7 @@ class _CorrigirState extends State<Corrigir> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'Dados da prova',
+                'Dados da correção',
                 style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
@@ -993,59 +1131,53 @@ class _CorrigirState extends State<Corrigir> {
                 ),
               ),
               const SizedBox(height: 14),
-              Text('Aluno: ${_nomeController.text.trim()}'),
+              Text('Aluno: $_alunoNome'),
+              if (_alunoMatricula.isNotEmpty)
+                Text('Matrícula: $_alunoMatricula'),
+              Text('Turma: ${_turmaNome.isNotEmpty ? _turmaNome : '—'}'),
               Text(
-                'Matrícula: ${_matriculaController.text.trim().isEmpty ? '—' : _matriculaController.text.trim()}',
+                'Disciplina: ${_disciplinaNome.isNotEmpty ? _disciplinaNome : '—'}',
               ),
-              Text('Turma: ${_prova?['turma'] ?? '—'}'),
-              Text('Disciplina: ${_prova?['disciplina'] ?? '—'}'),
-              Text('Prova: ${_prova?['titulo'] ?? '—'}'),
+              Text('Prova: ${_prova?['titulo'] ?? _prova?['nome'] ?? '—'}'),
               Text('Data: ${DateTime.now().toString().substring(0, 10)}'),
             ],
           ),
         ),
         const SizedBox(height: 24),
-        SizedBox(
-          width: double.infinity,
-          height: 52,
-          child: ElevatedButton.icon(
-            onPressed: _reiniciar,
-            icon: const Icon(Icons.refresh),
-            label: const Text('Nova correção'),
-            style: _estiloBotao(),
-          ),
+        Row(
+          children: [
+            Expanded(
+              child: SizedBox(
+                height: 52,
+                child: ElevatedButton.icon(
+                  onPressed: _iniciarCamera,
+                  icon: const Icon(Icons.qr_code_scanner),
+                  label: const Text('Ler próxima prova'),
+                  style: _estiloBotao(),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: SizedBox(
+                height: 52,
+                child: OutlinedButton.icon(
+                  onPressed: _reiniciar,
+                  icon: const Icon(Icons.home_outlined),
+                  label: const Text('Início'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: verde,
+                    side: const BorderSide(color: verde),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ],
-    );
-  }
-
-  Widget _campo({
-    required TextEditingController controller,
-    required String label,
-    required IconData icone,
-  }) {
-    return TextField(
-      controller: controller,
-      decoration: InputDecoration(
-        labelText: label,
-        prefixIcon: Icon(icone, color: verde),
-        filled: true,
-        fillColor: fundo,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-    );
-  }
-
-  Widget _botao(String titulo, IconData icone, VoidCallback? acao) {
-    return SizedBox(
-      width: double.infinity,
-      height: 52,
-      child: ElevatedButton.icon(
-        onPressed: acao,
-        icon: Icon(icone),
-        label: Text(titulo, textAlign: TextAlign.center),
-        style: _estiloBotao(),
-      ),
     );
   }
 
@@ -1053,7 +1185,7 @@ class _CorrigirState extends State<Corrigir> {
     return ElevatedButton.styleFrom(
       backgroundColor: verde,
       foregroundColor: Colors.white,
-      disabledBackgroundColor: verde.withOpacity(0.4),
+      disabledBackgroundColor: verde.withValues(alpha: 0.4),
       elevation: 0,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
     );

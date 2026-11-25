@@ -1,4 +1,5 @@
 import 'dart:convert';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
@@ -114,23 +115,19 @@ class _CorrigirState extends State<Corrigir> {
         .get();
 
     for (final provaDoc in provasSnap.docs) {
-      try {
-        final alunosSnap = await provaDoc.reference
-            .collection('alunos')
-            .where('criadoPor', isEqualTo: uidAtual)
-            .where('codigo', isEqualTo: codigoLimpo)
-            .limit(1)
-            .get();
+      final alunosSnap = await provaDoc.reference
+          .collection('alunos')
+          .where('criadoPor', isEqualTo: uidAtual)
+          .where('codigo', isEqualTo: codigoLimpo)
+          .limit(1)
+          .get();
 
-        if (alunosSnap.docs.isNotEmpty) {
-          return {
-            'provaId': provaDoc.id,
-            'alunoDocId': alunosSnap.docs.first.id,
-            'dadosAluno': alunosSnap.docs.first.data(),
-          };
-        }
-      } catch (e) {
-        debugPrint('Erro ao ler alunos de ${provaDoc.id}: $e');
+      if (alunosSnap.docs.isNotEmpty) {
+        return {
+          'provaId': provaDoc.id,
+          'alunoDocId': alunosSnap.docs.first.id,
+          'dadosAluno': alunosSnap.docs.first.data(),
+        };
       }
     }
 
@@ -157,12 +154,10 @@ class _CorrigirState extends State<Corrigir> {
 
       if (raw.startsWith('{')) {
         final decoded = jsonDecode(raw) as Map<String, dynamic>;
-        codigoLido = (decoded['codigo'] ??
-            decoded['provaId'] ??
-            decoded['id'] ??
-            '')
-            .toString()
-            .trim();
+        codigoLido =
+            (decoded['codigo'] ?? decoded['provaId'] ?? decoded['id'] ?? '')
+                .toString()
+                .trim();
         provaIdFromQr = decoded['provaId']?.toString();
         alunoIdFromQr = decoded['alunoId']?.toString();
 
@@ -189,10 +184,12 @@ class _CorrigirState extends State<Corrigir> {
 
       if (encontrada != null) {
         provaIdFinal = encontrada['provaId'].toString();
-        alunoDocIdFinal = encontrada['alunoDocId']?.toString() ?? alunoDocIdFinal;
+        alunoDocIdFinal =
+            encontrada['alunoDocId']?.toString() ?? alunoDocIdFinal;
         if (encontrada['dadosAluno'] is Map) {
-          dadosFolhaAluno =
-          Map<String, dynamic>.from(encontrada['dadosAluno'] as Map);
+          dadosFolhaAluno = Map<String, dynamic>.from(
+            encontrada['dadosAluno'] as Map,
+          );
         }
       }
 
@@ -210,8 +207,6 @@ class _CorrigirState extends State<Corrigir> {
       }
     }
   }
-
-
 
   Future<void> _carregarEProcessarCorrecaoAutomatica({
     required String provaId,
@@ -253,12 +248,7 @@ class _CorrigirState extends State<Corrigir> {
     }
 
     try {
-      debugPrint('========== INICIANDO CORREÇÃO ==========');
-      debugPrint('Prova: $provaId');
-      debugPrint('Aluno: $alunoId');
-
-      final provaDoc =
-      await _db.collection('criarProvas').doc(provaId).get();
+      final provaDoc = await _db.collection('criarProvas').doc(provaId).get();
 
       if (!provaDoc.exists) {
         throw Exception('Prova não encontrada.');
@@ -269,8 +259,9 @@ class _CorrigirState extends State<Corrigir> {
       final rawQuestoesIds =
           dadosProva['questoesIds'] ?? dadosProva['questoes'];
 
-      final List<dynamic> listaQuestoes =
-      rawQuestoesIds is List ? rawQuestoesIds : [];
+      final List<dynamic> listaQuestoes = rawQuestoesIds is List
+          ? rawQuestoesIds
+          : [];
 
       if (listaQuestoes.isEmpty) {
         throw Exception('A prova não possui questões vinculadas.');
@@ -297,16 +288,16 @@ class _CorrigirState extends State<Corrigir> {
         if (item is Map) {
           questao = Map<String, dynamic>.from(item);
 
-          questaoId = (questao['id'] ??
-              questao['questaoId'] ??
-              questao['codigo'] ??
-              'questao_$i')
-              .toString();
+          questaoId =
+              (questao['id'] ??
+                      questao['questaoId'] ??
+                      questao['codigo'] ??
+                      'questao_$i')
+                  .toString();
         } else {
           questaoId = item.toString();
 
-          final qDoc =
-          await _db.collection('questoes').doc(questaoId).get();
+          final qDoc = await _db.collection('questoes').doc(questaoId).get();
 
           if (!qDoc.exists) {
             throw Exception('Questão $questaoId não encontrada.');
@@ -331,8 +322,7 @@ class _CorrigirState extends State<Corrigir> {
 
         dynamic respostaCorreta = gabaritoMap[questaoId];
 
-        respostaCorreta ??=
-        gabaritoMap[questao['codigo']?.toString()];
+        respostaCorreta ??= gabaritoMap[questao['codigo']?.toString()];
 
         respostaCorreta ??= questao['gabarito'];
 
@@ -352,9 +342,7 @@ class _CorrigirState extends State<Corrigir> {
         );
 
         if (gabarito.isEmpty) {
-          throw Exception(
-            'Gabarito inválido na questão ${i + 1}.',
-          );
+          throw Exception('Gabarito inválido na questão ${i + 1}.');
         }
 
         questoesCarregadas.add({
@@ -363,30 +351,26 @@ class _CorrigirState extends State<Corrigir> {
           'alternativas': alternativas,
           'gabarito': gabarito,
         });
-
-        debugPrint(
-          'Questão ${i + 1}: gabarito $gabarito',
-        );
       }
 
       final dadosFolha = dadosFolhaAluno ?? <String, dynamic>{};
 
-      final turmaId = (dadosFolha['turmaId'] ??
-          dadosProva['turmaId'] ??
-          '')
+      final turmaId = (dadosFolha['turmaId'] ?? dadosProva['turmaId'] ?? '')
           .toString();
 
-      String turmaNomeFinal = (dadosFolha['turmaNome'] ??
-          dadosProva['turmaNome'] ??
-          dadosProva['turma'] ??
-          '')
-          .toString();
+      String turmaNomeFinal =
+          (dadosFolha['turmaNome'] ??
+                  dadosProva['turmaNome'] ??
+                  dadosProva['turma'] ??
+                  '')
+              .toString();
 
-      String disciplinaFinal = (dadosProva['disciplina'] ??
-          dadosProva['disciplinaNome'] ??
-          dadosProva['materia'] ??
-          '')
-          .toString();
+      String disciplinaFinal =
+          (dadosProva['disciplina'] ??
+                  dadosProva['disciplinaNome'] ??
+                  dadosProva['materia'] ??
+                  '')
+              .toString();
 
       if (turmaNomeFinal.isEmpty && turmaId.isNotEmpty) {
         final turmaDoc = await _db.collection('turmas').doc(turmaId).get();
@@ -394,19 +378,18 @@ class _CorrigirState extends State<Corrigir> {
         if (turmaDoc.exists) {
           final dadosTurma = turmaDoc.data() ?? {};
 
-          turmaNomeFinal = (dadosTurma['nome'] ??
-              dadosTurma['turmaNome'] ??
-              dadosTurma['nomeTurma'] ??
-              '')
-              .toString();
+          turmaNomeFinal =
+              (dadosTurma['nome'] ??
+                      dadosTurma['turmaNome'] ??
+                      dadosTurma['nomeTurma'] ??
+                      '')
+                  .toString();
         }
       }
 
-      String nomeAlunoFinal =
-      (dadosFolha['alunoNome'] ?? '').toString();
+      String nomeAlunoFinal = (dadosFolha['alunoNome'] ?? '').toString();
 
-      String matriculaFinal =
-      (dadosFolha['matricula'] ?? '').toString();
+      String matriculaFinal = (dadosFolha['matricula'] ?? '').toString();
 
       if (nomeAlunoFinal.isEmpty && alunoId != null && alunoId.isNotEmpty) {
         if (turmaId.isNotEmpty) {
@@ -420,11 +403,9 @@ class _CorrigirState extends State<Corrigir> {
           if (docAluno.exists) {
             final dadosAluno = docAluno.data() ?? {};
 
-            nomeAlunoFinal =
-                (dadosAluno['nome'] ?? 'Aluno').toString();
+            nomeAlunoFinal = (dadosAluno['nome'] ?? 'Aluno').toString();
 
-            matriculaFinal =
-                (dadosAluno['matricula'] ?? alunoId).toString();
+            matriculaFinal = (dadosAluno['matricula'] ?? alunoId).toString();
           }
         }
 
@@ -438,12 +419,11 @@ class _CorrigirState extends State<Corrigir> {
         nomeAlunoFinal = 'Aluno não identificado';
       }
 
-      final List<dynamic> respostasOriginais =
-      respostasCapturadas.isNotEmpty
+      final List<dynamic> respostasOriginais = respostasCapturadas.isNotEmpty
           ? respostasCapturadas
           : (dadosFolha['gabarito'] is List
-          ? List<dynamic>.from(dadosFolha['gabarito'])
-          : []);
+                ? List<dynamic>.from(dadosFolha['gabarito'])
+                : []);
 
       if (respostasOriginais.isEmpty) {
         throw Exception(
@@ -453,7 +433,7 @@ class _CorrigirState extends State<Corrigir> {
 
       final List<String> respostasFinais = List.generate(
         questoesCarregadas.length,
-            (i) {
+        (i) {
           if (i >= respostasOriginais.length) {
             return '';
           }
@@ -507,8 +487,7 @@ class _CorrigirState extends State<Corrigir> {
         'professorId': usuario.uid,
         'criadoPor': usuario.uid,
         'provaId': provaId,
-        'tituloProva':
-        dadosProva['titulo'] ?? dadosProva['nome'] ?? 'Prova',
+        'tituloProva': dadosProva['titulo'] ?? dadosProva['nome'] ?? 'Prova',
         'turma': turmaNomeFinal,
         'turmaNome': turmaNomeFinal,
         'disciplina': disciplinaFinal,
@@ -527,17 +506,15 @@ class _CorrigirState extends State<Corrigir> {
         'dataCorrecao': FieldValue.serverTimestamp(),
       };
 
-      debugPrint('========== RESULTADO ==========');
-      debugPrint('Aluno: $nomeAlunoFinal');
-      debugPrint('Acertos: $acertos');
-      debugPrint('Erros: $erros');
-      debugPrint('Em branco: $emBranco');
-      debugPrint('Nota: $nota');
+      final correcaoRef = await _db.collection('correcoes').add(dadosCorrecao);
 
-      await _db.collection('correcoes').add(dadosCorrecao);
+      final correcaoSalva = await correcaoRef.get();
+
+      if (!correcaoSalva.exists) {
+        throw Exception('Não foi possível confirmar o salvamento da correção.');
+      }
 
       if (!mounted) return;
-
       setState(() {
         _provaSelecionadaId = provaId;
         _prova = dadosProva;
@@ -549,17 +526,9 @@ class _CorrigirState extends State<Corrigir> {
         _alunoMatricula = matriculaFinal;
         etapa = 2;
       });
-
-      debugPrint('========== CORREÇÃO CONCLUÍDA ==========');
-    } on FirebaseException catch (e, stackTrace) {
-      debugPrint('Erro Firebase: ${e.code} - ${e.message}');
-      debugPrint('$stackTrace');
-
+    } on FirebaseException catch (e) {
       _mensagem('Erro Firebase: ${e.code} - ${e.message}');
-    } catch (e, stackTrace) {
-      debugPrint('Erro na correção: $e');
-      debugPrint('$stackTrace');
-
+    } catch (e) {
       _mensagem(e.toString().replaceFirst('Exception: ', ''));
     } finally {
       if (mounted) {
@@ -573,9 +542,7 @@ class _CorrigirState extends State<Corrigir> {
 
   void _mensagem(String msg) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg)),
-    );
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
   void _reiniciar() {
@@ -661,7 +628,6 @@ class _CorrigirState extends State<Corrigir> {
     return _buildInicio();
   }
 
-
   Widget _buildInicio() {
     if (_uid.isEmpty) {
       return Container(
@@ -696,11 +662,7 @@ class _CorrigirState extends State<Corrigir> {
               color: verde,
               borderRadius: BorderRadius.circular(20),
             ),
-            child: const Icon(
-              Icons.qr_code_scanner,
-              size: 50,
-              color: fundo,
-            ),
+            child: const Icon(Icons.qr_code_scanner, size: 50, color: fundo),
           ),
           const SizedBox(height: 22),
           const Text(
@@ -728,10 +690,7 @@ class _CorrigirState extends State<Corrigir> {
               icon: const Icon(Icons.camera_alt_outlined, size: 24),
               label: const Text(
                 'Escanear QR Code da Prova',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
               style: _estiloBotao(),
             ),
@@ -771,9 +730,7 @@ class _CorrigirState extends State<Corrigir> {
                 );
               }
 
-              final valorValido = docs.any(
-                    (d) => d.id == _provaSelecionadaId,
-              )
+              final valorValido = docs.any((d) => d.id == _provaSelecionadaId)
                   ? _provaSelecionadaId
                   : null;
 
@@ -795,15 +752,14 @@ class _CorrigirState extends State<Corrigir> {
                       final titulo =
                           d['titulo'] ?? d['nome'] ?? 'Prova sem título';
                       final turma = d['turma'] ?? d['turmaNome'] ?? '';
-                      final disciplina =
-                          d['disciplina'] ?? d['materia'] ?? '';
+                      final disciplina = d['disciplina'] ?? d['materia'] ?? '';
 
                       return DropdownMenuItem<String>(
                         value: doc.id,
                         child: Text(
                           '$titulo'
-                              '${disciplina.toString().isNotEmpty ? " • $disciplina" : ""}'
-                              '${turma.toString().isNotEmpty ? " ($turma)" : ""}',
+                          '${disciplina.toString().isNotEmpty ? " • $disciplina" : ""}'
+                          '${turma.toString().isNotEmpty ? " ($turma)" : ""}',
                           overflow: TextOverflow.ellipsis,
                         ),
                       );
@@ -825,20 +781,17 @@ class _CorrigirState extends State<Corrigir> {
                       onPressed: valorValido == null
                           ? null
                           : () {
-                        setState(() {
-                          _mostrarSelecaoAluno = true;
-                          _alunoSelecionadoId = null;
-                          _dadosFolhaSelecionada = null;
-                        });
-                      },
+                              setState(() {
+                                _mostrarSelecaoAluno = true;
+                                _alunoSelecionadoId = null;
+                                _dadosFolhaSelecionada = null;
+                              });
+                            },
                       icon: const Icon(Icons.people_outline),
                       label: const Text('Corrigir Prova Selecionada'),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: verde,
-                        side: const BorderSide(
-                          color: verde,
-                          width: 1.5,
-                        ),
+                        side: const BorderSide(color: verde, width: 1.5),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10),
                         ),
@@ -861,8 +814,7 @@ class _CorrigirState extends State<Corrigir> {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    StreamBuilder<
-                        QuerySnapshot<Map<String, dynamic>>>(
+                    StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                       stream: _db
                           .collection('criarProvas')
                           .doc(valorValido)
@@ -879,9 +831,7 @@ class _CorrigirState extends State<Corrigir> {
                         if (!alunoSnapshot.hasData) {
                           return const Padding(
                             padding: EdgeInsets.all(16),
-                            child: CircularProgressIndicator(
-                              color: verde,
-                            ),
+                            child: CircularProgressIndicator(color: verde),
                           );
                         }
 
@@ -897,9 +847,8 @@ class _CorrigirState extends State<Corrigir> {
                           );
                         }
 
-                        final alunoValido = alunos.any(
-                              (doc) => doc.id == _alunoSelecionadoId,
-                        )
+                        final alunoValido =
+                            alunos.any((doc) => doc.id == _alunoSelecionadoId)
                             ? _alunoSelecionadoId
                             : null;
 
@@ -934,7 +883,7 @@ class _CorrigirState extends State<Corrigir> {
                                 if (id == null) return;
 
                                 final aluno = alunos.firstWhere(
-                                      (doc) => doc.id == id,
+                                  (doc) => doc.id == id,
                                 );
 
                                 setState(() {
@@ -951,13 +900,13 @@ class _CorrigirState extends State<Corrigir> {
                                 onPressed: alunoValido == null
                                     ? null
                                     : () {
-                                  _carregarEProcessarCorrecaoAutomatica(
-                                    provaId: valorValido,
-                                    alunoId: _alunoSelecionadoId,
-                                    dadosFolhaAluno:
-                                    _dadosFolhaSelecionada,
-                                  );
-                                },
+                                        _carregarEProcessarCorrecaoAutomatica(
+                                          provaId: valorValido,
+                                          alunoId: _alunoSelecionadoId,
+                                          dadosFolhaAluno:
+                                              _dadosFolhaSelecionada,
+                                        );
+                                      },
                                 icon: const Icon(Icons.check_circle_outline),
                                 label: const Text('Corrigir Aluno'),
                                 style: _estiloBotao(),
@@ -1032,8 +981,10 @@ class _CorrigirState extends State<Corrigir> {
           TextButton.icon(
             onPressed: _reiniciar,
             icon: const Icon(Icons.close, color: verde),
-            label:
-            const Text('Cancelar leitura', style: TextStyle(color: verde)),
+            label: const Text(
+              'Cancelar leitura',
+              style: TextStyle(color: verde),
+            ),
           ),
         ],
       ),
@@ -1131,7 +1082,10 @@ class _CorrigirState extends State<Corrigir> {
                 SizedBox(
                   width: largura,
                   child: _infoCard(
-                      'Acertos', '$acertos', Icons.check_circle_outline),
+                    'Acertos',
+                    '$acertos',
+                    Icons.check_circle_outline,
+                  ),
                 ),
                 SizedBox(
                   width: largura,
@@ -1139,8 +1093,11 @@ class _CorrigirState extends State<Corrigir> {
                 ),
                 SizedBox(
                   width: largura,
-                  child: _infoCard('Em branco', '$emBranco',
-                      Icons.remove_circle_outline),
+                  child: _infoCard(
+                    'Em branco',
+                    '$emBranco',
+                    Icons.remove_circle_outline,
+                  ),
                 ),
                 SizedBox(
                   width: largura,
@@ -1178,7 +1135,9 @@ class _CorrigirState extends State<Corrigir> {
               if (_alunoMatricula.isNotEmpty)
                 Text('Matrícula: $_alunoMatricula'),
               Text('Turma: ${_turmaNome.isNotEmpty ? _turmaNome : '—'}'),
-              Text('Disciplina: ${_disciplinaNome.isNotEmpty ? _disciplinaNome : '—'}'),
+              Text(
+                'Disciplina: ${_disciplinaNome.isNotEmpty ? _disciplinaNome : '—'}',
+              ),
               Text('Prova: ${_prova?['titulo'] ?? _prova?['nome'] ?? '—'}'),
               Text('Data: ${DateTime.now().toString().substring(0, 10)}'),
             ],
@@ -1228,9 +1187,7 @@ class _CorrigirState extends State<Corrigir> {
       foregroundColor: Colors.white,
       disabledBackgroundColor: verde.withValues(alpha: 0.4),
       elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(10),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
     );
   }
 

@@ -4,6 +4,7 @@ class Aluno {
   final String id;
   final String nome;
   final String email;
+  final String matricula;
   final String turmaID;
   final String criadoPor;
 
@@ -11,6 +12,7 @@ class Aluno {
     required this.id,
     required this.nome,
     required this.email,
+    required this.matricula,
     required this.turmaID,
     required this.criadoPor,
   });
@@ -21,6 +23,7 @@ class Aluno {
       id: doc.id,
       nome: data['nome'] ?? '',
       email: data['email'] ?? '',
+      matricula: data['matricula'] ?? '',
       turmaID: data['turmaID'] ?? '',
       criadoPor: data['criadoPor'] ?? '',
     );
@@ -30,6 +33,7 @@ class Aluno {
     return {
       'nome': nome,
       'email': email,
+      'matricula': matricula,
       'turmaID': turmaID,
       'criadoPor': criadoPor,
     };

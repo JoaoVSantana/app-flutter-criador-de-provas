@@ -92,7 +92,9 @@ class DrawerNav extends StatelessWidget {
       ),
       onTap: () {
         Navigator.pop(context);
-        Navigator.pushNamed(context, rota);
+        final rotaAtual = ModalRoute.of(context)?.settings.name;
+        if (rotaAtual == rota) return;
+        Navigator.pushReplacementNamed(context, rota);
       },
     );
   }

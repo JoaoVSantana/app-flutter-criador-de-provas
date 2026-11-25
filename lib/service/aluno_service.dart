@@ -24,9 +24,32 @@ class AlunoService {
     final String? uid = _auth.currentUser?.uid;
     if (uid == null) throw Exception('Usuário não autenticado');
 
+    final matriculaLimpa = aluno.matricula.trim();
+    if (matriculaLimpa.isEmpty) {
+      throw Exception('Informe o número de matrícula.');
+    }
+
+    final existentes = await _alunosCollection
+        .where('criadoPor', isEqualTo: uid)
+        .get();
+
+    final duplicada = existentes.docs.any((doc) {
+      final data = doc.data() as Map<String, dynamic>;
+      final matriculaExistente =
+          (data['matricula'] ?? '').toString().trim().toLowerCase();
+      return matriculaExistente == matriculaLimpa.toLowerCase();
+    });
+
+    if (duplicada) {
+      throw Exception(
+        'Já existe um aluno cadastrado com a matrícula "$matriculaLimpa".',
+      );
+    }
+
     await _alunosCollection.add({
-      'nome': aluno.nome,
-      'email': aluno.email,
+      'nome': aluno.nome.trim(),
+      'email': aluno.email.trim(),
+      'matricula': matriculaLimpa,
       'turmaID': aluno.turmaID,
       'criadoPor': uid,
     });

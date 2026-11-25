@@ -4,7 +4,10 @@ import '../../widgets/header.dart';
 import '../../widgets/navegar.dart';
 import '../../widgets/drawernav.dart';
 import 'elem_comuns.dart';
+import '/models/turma.dart';
+import '/service/materia_service.dart';
 import '/service/questao_service.dart';
+import '/service/turma_service.dart';
 
 class SearchQuestionsPage extends StatefulWidget {
   const SearchQuestionsPage({super.key});
@@ -15,8 +18,13 @@ class SearchQuestionsPage extends StatefulWidget {
 
 class _SearchQuestionsPageState extends State<SearchQuestionsPage> {
   final _service = QuestaoService();
+  final _turmaService = TurmaService();
+  final _materiaService = MateriaService();
 
   late final Stream<List<Question>> _stream = _service.observarMinhas();
+  late final Stream<List<Turma>> _turmasStream = _turmaService.getTurmas();
+  late final Stream<List<String>> _materiasStream =
+      _materiaService.getMaterias(padrao: kMaterias);
 
   String _texto = '';
   String? _turma;
@@ -108,39 +116,73 @@ class _SearchQuestionsPageState extends State<SearchQuestionsPage> {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      _Filter<String>(
-                        icon: Icons.groups_outlined,
-                        allLabel: 'Todas as turmas',
-                        value: _turma,
-                        options: {for (final t in kTurmas) t: t},
-                        onChanged: (v) => setState(() => _turma = v),
-                      ),
-                      _Filter<String>(
-                        icon: Icons.menu_book_outlined,
-                        allLabel: 'Todas as matérias',
-                        value: _materia,
-                        options: {for (final m in kMaterias) m: m},
-                        onChanged: (v) => setState(() => _materia = v),
-                      ),
-                      _Filter<Nivel>(
-                        icon: Icons.signal_cellular_alt,
-                        allLabel: 'Todos os níveis',
-                        value: _nivel,
-                        options: {for (final n in Nivel.values) n: n.label},
-                        onChanged: (v) => setState(() => _nivel = v),
-                      ),
-                      _Filter<Tipo>(
-                        icon: Icons.checklist,
-                        allLabel: 'Todos os tipos',
-                        value: _tipo,
-                        options: {for (final t in Tipo.values) t: t.label},
-                        onChanged: (v) => setState(() => _tipo = v),
-                      ),
-                    ],
+                  StreamBuilder<List<Turma>>(
+                    stream: _turmasStream,
+                    builder: (context, turmasSnap) {
+                      final nomesTurmas = (turmasSnap.data ?? [])
+                          .map((t) => t.nome.trim())
+                          .where((nome) => nome.isNotEmpty)
+                          .toSet()
+                          .toList();
+                      final turmaSelecionadaValida =
+                          _turma != null && nomesTurmas.contains(_turma)
+                          ? _turma
+                          : null;
+
+                      return StreamBuilder<List<String>>(
+                        stream: _materiasStream,
+                        initialData: kMaterias,
+                        builder: (context, materiasSnap) {
+                          final materiasDisponiveis =
+                              materiasSnap.data ?? kMaterias;
+                          final materiaSelecionadaValida = _materia != null &&
+                                  materiasDisponiveis.contains(_materia)
+                              ? _materia
+                              : null;
+
+                          return Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              _Filter<String>(
+                                icon: Icons.groups_outlined,
+                                allLabel: 'Todas as turmas',
+                                value: turmaSelecionadaValida,
+                                options: {for (final t in nomesTurmas) t: t},
+                                onChanged: (v) => setState(() => _turma = v),
+                              ),
+                              _Filter<String>(
+                                icon: Icons.menu_book_outlined,
+                                allLabel: 'Todas as matérias',
+                                value: materiaSelecionadaValida,
+                                options: {
+                                  for (final m in materiasDisponiveis) m: m,
+                                },
+                                onChanged: (v) => setState(() => _materia = v),
+                              ),
+                              _Filter<Nivel>(
+                                icon: Icons.signal_cellular_alt,
+                                allLabel: 'Todos os níveis',
+                                value: _nivel,
+                                options: {
+                                  for (final n in Nivel.values) n: n.label,
+                                },
+                                onChanged: (v) => setState(() => _nivel = v),
+                              ),
+                              _Filter<Tipo>(
+                                icon: Icons.checklist,
+                                allLabel: 'Todos os tipos',
+                                value: _tipo,
+                                options: {
+                                  for (final t in Tipo.values) t: t.label,
+                                },
+                                onChanged: (v) => setState(() => _tipo = v),
+                              ),
+                            ],
+                          );
+                        },
+                      );
+                    },
                   ),
                   const SizedBox(height: 14),
                   Text(

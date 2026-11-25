@@ -25,6 +25,13 @@ class _ListaAlunosScreenState extends State<ListaAlunosScreen> {
   final bool usuarioEstaLogado = true;
   final AlunoService _alunoService = AlunoService();
 
+  void _mostrarMensagem(String mensagem) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(mensagem)),
+    );
+  }
+
   void _adicionarAlunoModal() {
     final nomeController = TextEditingController();
     final matriculaController = TextEditingController();
@@ -32,7 +39,7 @@ class _ListaAlunosScreenState extends State<ListaAlunosScreen> {
 
     showDialog(
       context: context,
-      builder: (context) {
+      builder: (dialogContext) {
         return AlertDialog(
           title: const Text('Adicionar Aluno'),
           content: Column(
@@ -54,25 +61,39 @@ class _ListaAlunosScreenState extends State<ListaAlunosScreen> {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: () => Navigator.pop(dialogContext),
               child: const Text('Cancelar', style: TextStyle(color: Colors.grey)),
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: Colors.green[700]),
               onPressed: () async {
-                if (nomeController.text.isNotEmpty && matriculaController.text.isNotEmpty) {
-                  // Pega o UID do utilizador autenticado no momento da criação
-                  final String? uid = FirebaseAuth.instance.currentUser?.uid;
+                final nome = nomeController.text.trim();
+                final email = emailController.text.trim();
+                final matricula = matriculaController.text.trim();
 
-                  final novoAluno = Aluno(
-                    id: '',
-                    nome: nomeController.text,
-                    email: emailController.text,
-                    turmaID: widget.turmaId,
-                    criadoPor: uid ?? '', // <--- Passando o UID obrigatório
-                  );
+                if (nome.isEmpty || matricula.isEmpty) {
+                  _mostrarMensagem('Preencha o nome e a matrícula do aluno.');
+                  return;
+                }
+
+                // Pega o UID do utilizador autenticado no momento da criação
+                final String? uid = FirebaseAuth.instance.currentUser?.uid;
+
+                final novoAluno = Aluno(
+                  id: '',
+                  nome: nome,
+                  email: email,
+                  matricula: matricula,
+                  turmaID: widget.turmaId,
+                  criadoPor: uid ?? '', // <--- Passando o UID obrigatório
+                );
+
+                try {
                   await _alunoService.adicionarAluno(novoAluno);
-                  if (context.mounted) Navigator.pop(context);
+                  if (dialogContext.mounted) Navigator.pop(dialogContext);
+                } catch (e) {
+                  final msg = e.toString().replaceFirst('Exception: ', '');
+                  _mostrarMensagem(msg);
                 }
               },
               child: const Text('Salvar', style: TextStyle(color: Colors.white)),
@@ -165,7 +186,11 @@ class _ListaAlunosScreenState extends State<ListaAlunosScreen> {
                         child: Text(aluno.nome.isNotEmpty ? aluno.nome[0] : 'A', style: const TextStyle(color: Colors.green)),
                       ),
                       title: Text(aluno.nome),
-                      subtitle: Text('E-mail: ${aluno.email}'),
+                      subtitle: Text(
+                        aluno.matricula.isNotEmpty
+                            ? 'Matrícula: ${aluno.matricula} • E-mail: ${aluno.email}'
+                            : 'E-mail: ${aluno.email}',
+                      ),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -184,7 +209,9 @@ class _ListaAlunosScreenState extends State<ListaAlunosScreen> {
                                 MaterialPageRoute(
                                   builder: (context) => FolhaRespostaScreen(
                                     nomeAluno: aluno.nome,
-                                    matricula: aluno.email,
+                                    matricula: aluno.matricula.isNotEmpty
+                                        ? aluno.matricula
+                                        : aluno.email,
                                     turma: widget.turmaNome,
                                   ),
                                 ),

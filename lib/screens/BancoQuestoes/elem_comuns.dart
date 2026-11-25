@@ -61,7 +61,6 @@ const kMaterias = [
   'Português',
   'Geografia',
 ];
-const kTurmas = ['1º Ano A', '2º Ano B'];
 
 class MenuTitle extends StatelessWidget {
   final String title;
@@ -139,6 +138,8 @@ class QuestionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final q = question;
+    final turmasLabel = q.turmas.isEmpty ? 'Sem turma' : q.turmas.join(', ');
+
     return Container(
       decoration: BoxDecoration(
         color: kListCard,
@@ -179,7 +180,7 @@ class QuestionCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  q.assunto.isEmpty ? q.materia : '${q.materia} · ${q.assunto}',
+                  q.assunto.isEmpty ? q.materia : '${q.materia} ·${q.assunto}',
                   style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
                 ),
                 const SizedBox(height: 8),
@@ -190,7 +191,7 @@ class QuestionCard extends StatelessWidget {
                     _MiniInfo(icon: Icons.checklist, text: q.tipo.label),
                     _MiniInfo(
                       icon: Icons.groups_outlined,
-                      text: q.turmas.join(', '),
+                      text: turmasLabel,
                     ),
                   ],
                 ),
@@ -221,7 +222,7 @@ class QuestionCard extends StatelessWidget {
                     Expanded(
                       child: Text(
                         q.tipo == Tipo.multipla
-                            ? '${String.fromCharCode(65 + i)}) ${q.alternativas[i]}'
+                            ? '${String.fromCharCode(65 + i)})${q.alternativas[i]}'
                             : q.alternativas[i],
                         style: TextStyle(
                           fontWeight: q.corretas.contains(i)

@@ -41,8 +41,6 @@ class _HeaderState extends State<Header> {
     await FirebaseAuth.instance.signOut();
     if (!mounted) return;
 
-    // Mantém só a primeira tela da pilha e abre o login por cima,
-    // assim as telas do usuário anterior deixam de existir
     Navigator.pushNamedAndRemoveUntil(
       context,
       AppRoutes.entrar,
@@ -57,20 +55,18 @@ class _HeaderState extends State<Header> {
         final larguraTela = constraints.maxWidth;
         final isMobile = larguraTela < 600;
 
-        //ajusta a tela conforme tamanho
-        final double alturaHeader = (larguraTela * 0.14).clamp(64.0, 100.0);
-        final double larguraLogo = (larguraTela * 0.22).clamp(100.0, 160.0);
-        final double alturaLogo = alturaHeader;
+        final double alturaHeader = (larguraTela * 0.14).clamp(64.0, 96.0);
+        final double larguraLogo = (larguraTela * 0.22).clamp(100.0, 156.0);
+        final double alturaLogo = (alturaHeader * 0.78).clamp(44.0, 74.0);
 
-        final double fontEntrar = (larguraTela * 0.035).clamp(14.0, 20.0);
-        final double iconeEntrar = (larguraTela * 0.05).clamp(20.0, 28.0);
-        final double paddingHorizontal = (larguraTela * 0.04).clamp(12.0, 24.0);
+        final double fontEntrar = (larguraTela * 0.035).clamp(14.0, 18.0);
+        final double iconeEntrar = (larguraTela * 0.05).clamp(20.0, 26.0);
+        final double paddingHorizontal = (larguraTela * 0.04).clamp(14.0, 28.0);
 
         final corAtual = isHover
             ? const Color.fromARGB(255, 47, 51, 49)
             : _corPadrao;
 
-        // Monta o botão: logado mostra "Olá, nome", deslogado mostra "Entrar"
         Widget botao({required bool logado, required String texto}) {
           return MouseRegion(
             cursor: logado
@@ -79,48 +75,65 @@ class _HeaderState extends State<Header> {
             onEnter: (_) => setState(() => isHover = true),
             onExit: (_) => setState(() => isHover = false),
             child: InkWell(
-              // logado: sem ação (o botão de sair fica ao lado)
+              borderRadius: BorderRadius.circular(14),
               onTap: logado
                   ? null
                   : () => Navigator.pushNamed(context, AppRoutes.entrar),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.person, color: corAtual, size: iconeEntrar),
-                  const SizedBox(width: 8),
-                  // "Entrar" some no mobile; a saudação continua aparecendo
-                  if (logado ? texto.isNotEmpty : !isMobile)
-                    ConstrainedBox(
-                      constraints: BoxConstraints(
-                        maxWidth: isMobile ? 120 : 260,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.person_rounded, color: corAtual, size: iconeEntrar),
+                    const SizedBox(width: 8),
+                    if (logado ? texto.isNotEmpty : !isMobile)
+                      ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxWidth: isMobile ? 120 : 260,
+                        ),
+                        child: Text(
+                          texto,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: fontEntrar,
+                            fontWeight: FontWeight.w600,
+                            color: corAtual,
+                          ),
+                        ),
                       ),
-                      child: Text(
-                        texto,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontSize: fontEntrar, color: corAtual),
-                      ),
-                    ),
-                ],
+                  ],
+                ),
               ),
             ),
           );
         }
 
-        // Ícone de sair, só aparece quando há alguém logado
         final botaoSair = IconButton(
           tooltip: 'Sair',
           onPressed: _confirmarSaida,
-          icon: Icon(Icons.logout, color: _corPadrao, size: iconeEntrar),
+          style: IconButton.styleFrom(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+          icon: Icon(Icons.logout_rounded, color: _corPadrao, size: iconeEntrar),
         );
 
         return Container(
           height: alturaHeader,
-          decoration: const BoxDecoration(
-            color: Color.fromARGB(255, 232, 236, 233),
-            border: Border(
-              bottom: BorderSide(color: Color.fromARGB(31, 0, 0, 0), width: 1),
+          decoration: BoxDecoration(
+            color: const Color.fromARGB(255, 232, 236, 233),
+            border: const Border(
+              bottom: BorderSide(color: Color.fromARGB(22, 0, 0, 0), width: 1),
             ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
           padding: EdgeInsets.symmetric(horizontal: paddingHorizontal),
           child: Row(
@@ -131,10 +144,7 @@ class _HeaderState extends State<Header> {
                 height: alturaLogo,
                 fit: BoxFit.contain,
               ),
-
               const Spacer(),
-
-              // 1º stream: quem está logado (muda no login, cadastro e logout)
               StreamBuilder<User?>(
                 stream: FirebaseAuth.instance.authStateChanges(),
                 initialData: FirebaseAuth.instance.currentUser,
@@ -145,7 +155,6 @@ class _HeaderState extends State<Header> {
                     return botao(logado: false, texto: 'Entrar');
                   }
 
-                  // 2º stream: o perfil dessa pessoa no Firestore
                   return StreamBuilder<Usuario?>(
                     stream: UsuarioService().observar(user.uid),
                     builder: (context, snap) {

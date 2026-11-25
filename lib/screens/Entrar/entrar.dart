@@ -23,8 +23,8 @@ class _EntrarState extends State<Entrar> {
     setState(() => _paginaAtual = index);
     _pageController.animateToPage(
       index,
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeInOut,
+      duration: const Duration(milliseconds: 260),
+      curve: Curves.easeOutCubic,
     );
   }
 
@@ -40,11 +40,22 @@ class _EntrarState extends State<Entrar> {
     return Expanded(
       child: GestureDetector(
         onTap: () => _irParaPagina(index),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOutCubic,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
           decoration: BoxDecoration(
             color: ativo ? Colors.white : Colors.transparent,
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(28),
+            boxShadow: ativo
+                ? [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.08),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ]
+                : null,
           ),
           alignment: Alignment.center,
           child: FittedBox(
@@ -54,8 +65,9 @@ class _EntrarState extends State<Entrar> {
               maxLines: 1,
               style: TextStyle(
                 fontSize: fontAba,
-                fontWeight: FontWeight.w400,
+                fontWeight: ativo ? FontWeight.w700 : FontWeight.w500,
                 fontFamily: 'Poppins',
+                color: const Color.fromARGB(255, 47, 51, 49),
               ),
             ),
           ),
@@ -77,28 +89,45 @@ class _EntrarState extends State<Entrar> {
         final isDesktop = larguraTela >= Breakpoints.tablet;
 
         final double tamanhoImagem = isMobile
-            ? 140
+            ? 155
             : isTablet
-            ? 180
+            ? 190
             : 220;
 
-        final double fontAba = isMobile ? 16 : 20;
-        final double paddingFormulario = isMobile ? 12 : 24;
+        final double fontAba = isMobile ? 16 : 19;
+        final double paddingFormulario = isMobile ? 6 : 12;
+
+        final seletorAbas = Container(
+          constraints: const BoxConstraints(maxWidth: 420),
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: const Color.fromARGB(255, 214, 224, 211),
+            borderRadius: BorderRadius.circular(32),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.05),
+                blurRadius: 14,
+                offset: const Offset(0, 5),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              _buildAba('Login', 0, fontAba),
+              _buildAba('Cadastro', 1, fontAba),
+            ],
+          ),
+        );
 
         final conteudoCard = Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                _buildAba('Login', 0, fontAba),
-                const SizedBox(width: 16),
-                _buildAba('Cadastro', 1, fontAba),
-              ],
-            ),
-            const SizedBox(height: 12),
+            seletorAbas,
+            const SizedBox(height: 18),
             SizedBox(
-              height: isMobile ? 420 : 460,
+              height: _paginaAtual == 0
+                  ? (isMobile ? 275 : 290)
+                  : (isMobile ? 430 : 450),
               child: PageView(
                 controller: _pageController,
                 onPageChanged: (index) => setState(() => _paginaAtual = index),
@@ -123,7 +152,7 @@ class _EntrarState extends State<Entrar> {
         final conteudoPrincipal = isDesktop || isTablet
             ? Center(
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 900),
+                  constraints: const BoxConstraints(maxWidth: 920),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.center,
@@ -134,7 +163,7 @@ class _EntrarState extends State<Entrar> {
                         height: tamanhoImagem,
                         fit: BoxFit.contain,
                       ),
-                      const SizedBox(width: 32),
+                      const SizedBox(width: 40),
                       Expanded(child: conteudoCard),
                     ],
                   ),
@@ -142,7 +171,7 @@ class _EntrarState extends State<Entrar> {
               )
             : Center(
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 480),
+                  constraints: const BoxConstraints(maxWidth: 460),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -152,7 +181,7 @@ class _EntrarState extends State<Entrar> {
                         height: tamanhoImagem,
                         fit: BoxFit.contain,
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 20),
                       conteudoCard,
                     ],
                   ),
@@ -165,27 +194,64 @@ class _EntrarState extends State<Entrar> {
           body: Column(
             children: [
               const Header(),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Builder(
-                  builder: (context) => IconButton(
-                    icon: const Icon(Icons.menu),
-                    onPressed: () => Scaffold.of(context).openDrawer(),
-                  ),
-                ),
-              ),
               Expanded(
                 child: Container(
                   width: double.infinity,
                   color: const Color.fromARGB(255, 228, 235, 230),
-                  padding: EdgeInsets.symmetric(
-                    horizontal: isMobile ? 8 : 24,
-                    vertical: 16,
+                  child: Stack(
+                    children: [
+                      Positioned(
+                        top: -70,
+                        right: -60,
+                        child: Container(
+                          width: 220,
+                          height: 220,
+                          decoration: BoxDecoration(
+                            color: const Color.fromARGB(255, 214, 224, 211)
+                                .withValues(alpha: 0.75),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        bottom: -90,
+                        left: -70,
+                        child: Container(
+                          width: 250,
+                          height: 250,
+                          decoration: BoxDecoration(
+                            color: const Color.fromARGB(255, 214, 224, 211)
+                                .withValues(alpha: 0.7),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        top: 8,
+                        left: 8,
+                        child: Builder(
+                          builder: (context) => IconButton(
+                            icon: const Icon(
+                              Icons.menu,
+                              color: Color.fromARGB(255, 47, 51, 49),
+                            ),
+                            onPressed: () => Scaffold.of(context).openDrawer(),
+                          ),
+                        ),
+                      ),
+                      Center(
+                        child: SingleChildScrollView(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: isMobile ? 16 : 24,
+                            vertical: 28,
+                          ),
+                          child: conteudoPrincipal,
+                        ),
+                      ),
+                    ],
                   ),
-                  child: SingleChildScrollView(child: conteudoPrincipal),
                 ),
               ),
-              const SizedBox(height: 24),
               Navegar(
                 onVoltar: _paginaAtual == 0
                     ? () => Navigator.pop(context)
@@ -199,3 +265,5 @@ class _EntrarState extends State<Entrar> {
     );
   }
 }
+
+

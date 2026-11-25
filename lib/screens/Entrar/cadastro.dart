@@ -1,14 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../respostaErro/respostaErro.dart';
-
 import '../Home/home.dart';
-
 import '/service/usuario_service.dart';
-
 import 'login.dart' show decoracaoCampo, BotaoPrincipal;
 
 class CadastroForm extends StatefulWidget {
@@ -31,7 +26,6 @@ class _CadastroFormState extends State<CadastroForm> {
   final _nomeController = TextEditingController();
   final _sobrenomeController = TextEditingController();
   final _emailController = TextEditingController();
-  final _cpfController = TextEditingController();
   final _senhaController = TextEditingController();
   bool _carregando = false;
 
@@ -40,7 +34,6 @@ class _CadastroFormState extends State<CadastroForm> {
     _nomeController.dispose();
     _sobrenomeController.dispose();
     _emailController.dispose();
-    _cpfController.dispose();
     _senhaController.dispose();
     super.dispose();
   }
@@ -55,7 +48,6 @@ class _CadastroFormState extends State<CadastroForm> {
     final nome = _nomeController.text.trim();
     final sobrenome = _sobrenomeController.text.trim();
     final email = _emailController.text.trim();
-    final cpf = _cpfController.text.trim();
     final senha = _senhaController.text;
 
     if (nome.isEmpty || email.isEmpty || senha.isEmpty) {
@@ -67,7 +59,7 @@ class _CadastroFormState extends State<CadastroForm> {
       await UsuarioService().cadastrar(
         nome: nome,
         sobrenome: sobrenome,
-        cpf: cpf,
+        cpf: '',
         email: email,
         senha: senha,
       );
@@ -89,44 +81,73 @@ class _CadastroFormState extends State<CadastroForm> {
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: EdgeInsets.symmetric(horizontal: widget.padding),
-      child: Column(
-        children: [
-          TextField(
-            controller: _nomeController,
-            decoration: decoracaoCampo('Nome'),
+    return Center(
+      child: SingleChildScrollView(
+        padding: EdgeInsets.symmetric(
+          horizontal: widget.padding,
+          vertical: 16,
+        ),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.78),
+              borderRadius: BorderRadius.circular(28),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.08),
+                  blurRadius: 24,
+                  offset: const Offset(0, 10),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: _nomeController,
+                  decoration: decoracaoCampo(
+                    'Nome',
+                    icone: Icons.person_outline,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: _sobrenomeController,
+                  decoration: decoracaoCampo(
+                    'Sobrenome',
+                    icone: Icons.badge_outlined,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: _emailController,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: decoracaoCampo(
+                    'Email',
+                    icone: Icons.mail_outline,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: _senhaController,
+                  obscureText: true,
+                  decoration: decoracaoCampo(
+                    'Senha',
+                    icone: Icons.lock_outline,
+                  ),
+                ),
+                const SizedBox(height: 22),
+                BotaoPrincipal(
+                  texto: 'Cadastrar  →',
+                  carregando: _carregando,
+                  onPressed: _fazerCadastro,
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 16),
-          TextField(
-            controller: _sobrenomeController,
-            decoration: decoracaoCampo('Sobrenome'),
-          ),
-          const SizedBox(height: 16),
-          TextField(
-            controller: _emailController,
-            keyboardType: TextInputType.emailAddress,
-            decoration: decoracaoCampo('Email'),
-          ),
-          const SizedBox(height: 16),
-          TextField(
-            controller: _cpfController,
-            keyboardType: TextInputType.number,
-            decoration: decoracaoCampo('CPF'),
-          ),
-          const SizedBox(height: 16),
-          TextField(
-            controller: _senhaController,
-            obscureText: true,
-            decoration: decoracaoCampo('Senha'),
-          ),
-          const SizedBox(height: 24),
-          BotaoPrincipal(
-            texto: 'Cadastrar',
-            carregando: _carregando,
-            onPressed: _fazerCadastro,
-          ),
-        ],
+        ),
       ),
     );
   }

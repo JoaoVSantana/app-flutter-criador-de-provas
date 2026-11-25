@@ -62,42 +62,100 @@ class _LoginFormState extends State<LoginForm> {
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: EdgeInsets.symmetric(horizontal: widget.padding),
-      child: Column(
-        children: [
-          TextField(
-            controller: widget.emailController,
-            keyboardType: TextInputType.emailAddress,
-            decoration: decoracaoCampo('Email'),
+    return Center(
+      child: SingleChildScrollView(
+        padding: EdgeInsets.symmetric(
+          horizontal: widget.padding,
+          vertical: 16,
+        ),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.78),
+              borderRadius: BorderRadius.circular(28),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.08),
+                  blurRadius: 24,
+                  offset: const Offset(0, 10),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: widget.emailController,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: decoracaoCampo(
+                    'Email',
+                    icone: Icons.mail_outline,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _senhaController,
+                  obscureText: true,
+                  decoration: decoracaoCampo(
+                    'Senha',
+                    icone: Icons.lock_outline,
+                  ),
+                  onSubmitted: (_) => _fazerLogin(),
+                ),
+                const SizedBox(height: 22),
+                BotaoPrincipal(
+                  texto: 'Entrar  →',
+                  carregando: _carregando,
+                  onPressed: _fazerLogin,
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 16),
-          TextField(
-            controller: _senhaController,
-            obscureText: true,
-            decoration: decoracaoCampo('Senha'),
-            onSubmitted: (_) => _fazerLogin(),
-          ),
-          const SizedBox(height: 24),
-          BotaoPrincipal(
-            texto: 'Entrar',
-            carregando: _carregando,
-            onPressed: _fazerLogin,
-          ),
-        ],
+        ),
       ),
     );
   }
 }
 
-InputDecoration decoracaoCampo(String label) {
+InputDecoration decoracaoCampo(String label, {IconData? icone}) {
   return InputDecoration(
-    labelText: label,
+    hintText: label,
+    prefixIcon: icone != null
+        ? Padding(
+            padding: const EdgeInsets.only(left: 18, right: 12),
+            child: Icon(
+              icone,
+              color: const Color.fromARGB(255, 47, 51, 49),
+              size: 20,
+            ),
+          )
+        : null,
+    prefixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
+    contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
     filled: true,
     fillColor: Colors.white,
     border: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(12),
-      borderSide: BorderSide.none,
+      borderRadius: BorderRadius.circular(28),
+      borderSide: BorderSide(
+        color: Colors.black.withValues(alpha: 0.14),
+        width: 1,
+      ),
+    ),
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(28),
+      borderSide: BorderSide(
+        color: Colors.black.withValues(alpha: 0.14),
+        width: 1,
+      ),
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(28),
+      borderSide: const BorderSide(
+        color: Color(0xFF4C6B5E),
+        width: 1.5,
+      ),
     ),
   );
 }
@@ -118,32 +176,46 @@ class BotaoPrincipal extends StatelessWidget {
   Widget build(BuildContext context) {
     return SizedBox(
       width: double.infinity,
-      child: ElevatedButton(
-        onPressed: carregando ? null : onPressed,
-        style: ElevatedButton.styleFrom(
-          padding: const EdgeInsets.symmetric(vertical: 14),
-          backgroundColor: const Color.fromARGB(255, 47, 51, 49),
-          foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(28),
+          boxShadow: [
+            BoxShadow(
+              color: const Color.fromARGB(255, 47, 51, 49).withValues(alpha: 0.22),
+              blurRadius: 16,
+              offset: const Offset(0, 7),
+            ),
+          ],
         ),
-        child: carregando
-            ? const SizedBox(
-                height: 20,
-                width: 20,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Colors.white,
+        child: ElevatedButton(
+          onPressed: carregando ? null : onPressed,
+          style: ElevatedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            backgroundColor: const Color.fromARGB(255, 47, 51, 49),
+            foregroundColor: Colors.white,
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(28),
+            ),
+          ),
+          child: carregando
+              ? const SizedBox(
+                  height: 22,
+                  width: 22,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.2,
+                    color: Colors.white,
+                  ),
+                )
+              : Text(
+                  texto,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.2,
+                  ),
                 ),
-              )
-            : Text(
-                texto,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
+        ),
       ),
     );
   }

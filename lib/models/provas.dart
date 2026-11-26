@@ -126,6 +126,25 @@ enum ModoEmbaralhar {
   bool get mudaAlternativas => this != ModoEmbaralhar.questoes;
 }
 
+/// Descobre, pelas versões já salvas, qual tipo de embaralhamento foi usado.
+/// Com uma única versão não há como saber, então volta o padrão (os dois).
+ModoEmbaralhar descobrirModo(List<VersaoProva> versoes) {
+  var questoes = false;
+  var alternativas = false;
+  for (final versao in versoes) {
+    for (var i = 0; i < versao.itens.length; i++) {
+      final item = versao.itens[i];
+      if (item.q != i) questoes = true;
+      for (var k = 0; k < item.alts.length; k++) {
+        if (item.alts[k] != k) alternativas = true;
+      }
+    }
+  }
+  if (questoes && !alternativas) return ModoEmbaralhar.questoes;
+  if (alternativas && !questoes) return ModoEmbaralhar.alternativas;
+  return ModoEmbaralhar.ambos;
+}
+
 List<VersaoProva> gerarVersoes(
   List<ProvaQuestao> questoes,
   int quantidade, {

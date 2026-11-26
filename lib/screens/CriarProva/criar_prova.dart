@@ -12,7 +12,10 @@ import 'detalhe_prova.dart';
 import 'previa_papel.dart';
 
 class CriarProvaPage extends StatefulWidget {
-  const CriarProvaPage({super.key});
+  /// Quando informada, a tela abre preenchida para editar essa prova.
+  final ProvaSalva? prova;
+
+  const CriarProvaPage({super.key, this.prova});
 
   @override
   State<CriarProvaPage> createState() => _CriarProvaPageState();
@@ -27,6 +30,34 @@ class _CriarProvaPageState extends State<CriarProvaPage> {
   ModoEmbaralhar _modo = ModoEmbaralhar.ambos;
   String? _erro;
   bool _salvando = false;
+
+  bool get _editando => widget.prova != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final prova = widget.prova;
+    if (prova == null) return;
+
+    _titulo.text = prova.titulo;
+    _escreverVersoes(prova.versoes.length);
+    _modo = descobrirModo(prova.versoes);
+    // Usa a cópia das questões salva na própria prova
+    _selecionadas.addAll(
+      prova.questoes.map(
+        (q) => Question(
+          id: q.questaoId,
+          codigo: q.codigo,
+          materia: q.materia,
+          assunto: q.assunto,
+          nivel: Nivel.baixo, // o nível não é guardado na prova
+          enunciado: q.enunciado,
+          alternativas: q.alternativas,
+          corretas: {q.correta},
+        ),
+      ),
+    );
+  }
 
   @override
   void dispose() {
@@ -199,6 +230,11 @@ class _CriarProvaPageState extends State<CriarProvaPage> {
       _erro = null;
     });
 
+    if (_editando) {
+      await _salvarEdicao(titulo, quantidade);
+      return;
+    }
+
     try {
       final r = await _service.criar(
         titulo: titulo,
@@ -223,6 +259,84 @@ class _CriarProvaPageState extends State<CriarProvaPage> {
         context,
         MaterialPageRoute(builder: (_) => DetalheProvaPage(provaId: r.id)),
       );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _salvando = false;
+        _erro = 'Erro ao salvar a prova: $e';
+      });
+    }
+  }
+
+  /// Diz se a mudança exige gerar as versões de novo.
+  bool _mudouVersoes(int quantidade) {
+    final prova = widget.prova!;
+    final antes = prova.questoes.map((q) => q.questaoId).join('|');
+    final depois = _selecionadas.map((q) => q.id).join('|');
+    return antes != depois ||
+        quantidade != prova.versoes.length ||
+        (quantidade > 1 && _modo != descobrirModo(prova.versoes));
+  }
+
+  Future<bool> _confirmarNovasVersoes(int alunos) async {
+    final confirmou = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Atualizar a prova dos alunos?'),
+        content: Text(
+          '$alunos aluno(s) já têm esta prova. As versões serão geradas de '
+          'novo e a versão e o gabarito deles podem mudar. PDFs já baixados '
+          'ou impressos ficam desatualizados: baixe e imprima novamente.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Atualizar'),
+          ),
+        ],
+      ),
+    );
+    return confirmou == true;
+  }
+
+  Future<void> _salvarEdicao(String titulo, int quantidade) async {
+    final id = widget.prova!.id;
+    try {
+      var geradas = quantidade;
+      if (_mudouVersoes(quantidade)) {
+        final alunos = await _service.contarAlunos(id);
+        if (!mounted) return;
+        if (alunos > 0 && !await _confirmarNovasVersoes(alunos)) {
+          if (mounted) setState(() => _salvando = false);
+          return;
+        }
+        geradas = await _service.atualizar(
+          provaId: id,
+          titulo: titulo,
+          questoes: _paraProvaQuestoes(),
+          quantidadeVersoes: quantidade,
+          modo: _modo,
+        );
+      } else {
+        await _service.renomear(id, titulo);
+      }
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            geradas < quantidade
+                ? 'Prova atualizada. Só foi possível gerar $geradas '
+                      'versão(ões) diferente(s).'
+                : 'Prova atualizada!',
+          ),
+        ),
+      );
+      Navigator.pop(context);
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -258,9 +372,12 @@ class _CriarProvaPageState extends State<CriarProvaPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Padding(
-                padding: EdgeInsets.only(top: 12),
-                child: MenuTitle(title: 'Nova prova', fontSize: 24),
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: MenuTitle(
+                  title: _editando ? 'Editar prova' : 'Nova prova',
+                  fontSize: 24,
+                ),
               ),
               const SizedBox(height: 12),
               TextField(
@@ -439,7 +556,10 @@ class _CriarProvaPageState extends State<CriarProvaPage> {
                                 color: Colors.white,
                               ),
                             )
-                          : const Text('Salvar prova'),
+                          : Text(
+                              _editando ? 'Salvar alterações' : 'Salvar prova',
+                              textAlign: TextAlign.center,
+                            ),
                     ),
                   ),
                 ],

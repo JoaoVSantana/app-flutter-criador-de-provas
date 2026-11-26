@@ -1,14 +1,17 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../widgets/drawernav.dart';
 import '../../widgets/header.dart';
 import '../../widgets/navegar.dart';
+import '../../service/omr_leitor.dart';
 
 class Corrigir extends StatefulWidget {
   const Corrigir({super.key});
@@ -25,6 +28,16 @@ class _CorrigirState extends State<Corrigir> {
   static const Color cinza = Color.fromARGB(255, 212, 214, 213);
   static const Color verde = Color(0xFF4C6B5E);
   static const Color texto = Color.fromARGB(255, 26, 29, 28);
+
+  static const double _pageWidth = 595.28;
+  static const double _pageHeight = 841.89;
+  static const double _questionTop = 164;
+  static const double _rowHeight = 16.5;
+  static const double _bubbleStartX = 110;
+  static const double _bubbleGap = 34;
+  static const double _bubbleSize = 18;
+  static const int _maxQuestions = 30;
+  static const int _maxAlternatives = 5;
 
   int etapa = 0;
 
@@ -47,6 +60,11 @@ class _CorrigirState extends State<Corrigir> {
   bool _processandoLeitura = false;
 
   MobileScannerController? _scannerController;
+  final ImagePicker _imagePicker = ImagePicker();
+  Uint8List? _imagemFolha;
+  final Set<int> _respostasAmbiguas = {};
+  String _turmaId = '';
+  dynamic _versaoFolha = 1;
 
   String get _uid => _auth.currentUser?.uid ?? '';
 
@@ -134,6 +152,7 @@ class _CorrigirState extends State<Corrigir> {
     return null;
   }
 
+
   Future<void> _aoDetectarQrCode(BarcodeCapture capture) async {
     if (_processandoLeitura) return;
 
@@ -150,7 +169,6 @@ class _CorrigirState extends State<Corrigir> {
       String codigoLido = raw;
       String? provaIdFromQr;
       String? alunoIdFromQr;
-      var respostasDoQr = [];
 
       if (raw.startsWith('{')) {
         final decoded = jsonDecode(raw) as Map<String, dynamic>;
@@ -160,13 +178,6 @@ class _CorrigirState extends State<Corrigir> {
                 .trim();
         provaIdFromQr = decoded['provaId']?.toString();
         alunoIdFromQr = decoded['alunoId']?.toString();
-
-        final rawRespostas = decoded['respostas'];
-        if (rawRespostas is List) {
-          for (final item in rawRespostas) {
-            respostasDoQr.add(item?.toString());
-          }
-        }
       }
 
       if (codigoLido.isEmpty) {
@@ -178,27 +189,32 @@ class _CorrigirState extends State<Corrigir> {
         provaIdInformada: provaIdFromQr ?? _provaSelecionadaId,
       );
 
-      String provaIdFinal = provaIdFromQr ?? _provaSelecionadaId ?? codigoLido;
-      String? alunoDocIdFinal = alunoIdFromQr ?? _alunoSelecionadoId;
-      Map<String, dynamic>? dadosFolhaAluno;
-
-      if (encontrada != null) {
-        provaIdFinal = encontrada['provaId'].toString();
-        alunoDocIdFinal =
-            encontrada['alunoDocId']?.toString() ?? alunoDocIdFinal;
-        if (encontrada['dadosAluno'] is Map) {
-          dadosFolhaAluno = Map<String, dynamic>.from(
-            encontrada['dadosAluno'] as Map,
-          );
-        }
+      if (encontrada == null && (provaIdFromQr == null || alunoIdFromQr == null)) {
+        throw Exception('Não foi possível identificar o aluno e a prova pelo QR Code.');
       }
 
-      await _carregarEProcessarCorrecaoAutomatica(
+      final provaIdFinal = encontrada?['provaId']?.toString() ??
+          provaIdFromQr ??
+          _provaSelecionadaId!;
+      final alunoDocIdFinal = encontrada?['alunoDocId']?.toString() ??
+          alunoIdFromQr ??
+          _alunoSelecionadoId;
+
+      Map<String, dynamic>? dadosFolhaAluno;
+      if (encontrada?['dadosAluno'] is Map) {
+        dadosFolhaAluno =
+        Map<String, dynamic>.from(encontrada!['dadosAluno'] as Map);
+      }
+
+      await _carregarDadosParaCorrecao(
         provaId: provaIdFinal,
         alunoId: alunoDocIdFinal,
         dadosFolhaAluno: dadosFolhaAluno,
-        respostasCapturadas: respostasDoQr,
       );
+
+      if (mounted && etapa == 1) {
+        await _scannerController?.start();
+      }
     } catch (e) {
       _mensagem(e.toString().replaceFirst('Exception: ', ''));
       if (mounted) {
@@ -208,11 +224,31 @@ class _CorrigirState extends State<Corrigir> {
     }
   }
 
-  Future<void> _carregarEProcessarCorrecaoAutomatica({
+  String _normalizarResposta(dynamic valor, int quantidadeAlternativas) {
+    if (valor == null) return '';
+
+    final resposta = valor.toString().trim().toUpperCase();
+    if (resposta.isEmpty || resposta == '-1') return '';
+
+    final indice = int.tryParse(resposta);
+    if (indice != null) {
+      if (indice >= 0 && indice < quantidadeAlternativas) {
+        return String.fromCharCode(65 + indice);
+      }
+      return '';
+    }
+
+    if (RegExp(r'^[A-Z]$').hasMatch(resposta)) {
+      return resposta;
+    }
+
+    return '';
+  }
+
+  Future<void> _carregarDadosParaCorrecao({
     required String provaId,
     String? alunoId,
     Map<String, dynamic>? dadosFolhaAluno,
-    List<dynamic> respostasCapturadas = const [],
   }) async {
     if (_uid.isEmpty) {
       _mensagem('Usuário não autenticado. Faça login novamente.');
@@ -220,32 +256,7 @@ class _CorrigirState extends State<Corrigir> {
     }
 
     if (_carregando) return;
-
     setState(() => _carregando = true);
-
-    String normalizarResposta(dynamic valor, int quantidadeAlternativas) {
-      if (valor == null) return '';
-
-      final resposta = valor.toString().trim().toUpperCase();
-
-      if (resposta.isEmpty || resposta == '-1') return '';
-
-      final indice = int.tryParse(resposta);
-
-      if (indice != null) {
-        if (indice >= 0 && indice < quantidadeAlternativas) {
-          return String.fromCharCode(65 + indice);
-        }
-
-        return '';
-      }
-
-      if (RegExp(r'^[A-Z]$').hasMatch(resposta)) {
-        return resposta;
-      }
-
-      return resposta;
-    }
 
     try {
       final provaDoc = await _db.collection('criarProvas').doc(provaId).get();
@@ -255,20 +266,22 @@ class _CorrigirState extends State<Corrigir> {
       }
 
       final dadosProva = provaDoc.data() ?? <String, dynamic>{};
-
       final rawQuestoesIds =
           dadosProva['questoesIds'] ?? dadosProva['questoes'];
-
-      final List<dynamic> listaQuestoes = rawQuestoesIds is List
-          ? rawQuestoesIds
-          : [];
+      final List<dynamic> listaQuestoes =
+      rawQuestoesIds is List ? rawQuestoesIds : [];
 
       if (listaQuestoes.isEmpty) {
         throw Exception('A prova não possui questões vinculadas.');
       }
 
-      final Map<String, dynamic> gabaritoMap = {};
+      if (listaQuestoes.length > _maxQuestions) {
+        throw Exception(
+          'O cartão-resposta suporta no máximo ${_maxQuestions} questões.',
+        );
+      }
 
+      final Map<String, dynamic> gabaritoMap = {};
       final rawGabarito = dadosProva['gabarito'];
 
       if (rawGabarito is Map) {
@@ -287,16 +300,13 @@ class _CorrigirState extends State<Corrigir> {
 
         if (item is Map) {
           questao = Map<String, dynamic>.from(item);
-
-          questaoId =
-              (questao['id'] ??
-                      questao['questaoId'] ??
-                      questao['codigo'] ??
-                      'questao_$i')
-                  .toString();
+          questaoId = (questao['id'] ??
+              questao['questaoId'] ??
+              questao['codigo'] ??
+              'questao_$i')
+              .toString();
         } else {
           questaoId = item.toString();
-
           final qDoc = await _db.collection('questoes').doc(questaoId).get();
 
           if (!qDoc.exists) {
@@ -308,7 +318,6 @@ class _CorrigirState extends State<Corrigir> {
         }
 
         final rawAlternativas = questao['alternativas'];
-
         final List<String> alternativas = rawAlternativas is List
             ? rawAlternativas.map((e) => e.toString()).toList()
             : [];
@@ -317,15 +326,18 @@ class _CorrigirState extends State<Corrigir> {
           throw Exception('A questão ${i + 1} não possui alternativas.');
         }
 
-        final rawCorretas = questao['corretas'];
-        final rawCorreta = questao['correta'];
+        if (alternativas.length > _maxAlternatives) {
+          throw Exception(
+            'A questão ${i + 1} possui mais alternativas que o cartão-resposta suporta.',
+          );
+        }
 
         dynamic respostaCorreta = gabaritoMap[questaoId];
-
         respostaCorreta ??= gabaritoMap[questao['codigo']?.toString()];
-
         respostaCorreta ??= questao['gabarito'];
 
+        final rawCorretas = questao['corretas'];
+        final rawCorreta = questao['correta'];
         respostaCorreta ??= rawCorretas is List && rawCorretas.isNotEmpty
             ? rawCorretas.first
             : rawCorreta;
@@ -336,10 +348,8 @@ class _CorrigirState extends State<Corrigir> {
           );
         }
 
-        final gabarito = normalizarResposta(
-          respostaCorreta,
-          alternativas.length,
-        );
+        final gabarito =
+        _normalizarResposta(respostaCorreta, alternativas.length);
 
         if (gabarito.isEmpty) {
           throw Exception('Gabarito inválido na questão ${i + 1}.');
@@ -354,41 +364,35 @@ class _CorrigirState extends State<Corrigir> {
       }
 
       final dadosFolha = dadosFolhaAluno ?? <String, dynamic>{};
+      final turmaId =
+      (dadosFolha['turmaId'] ?? dadosProva['turmaId'] ?? '').toString();
 
-      final turmaId = (dadosFolha['turmaId'] ?? dadosProva['turmaId'] ?? '')
+      String turmaNomeFinal = (dadosFolha['turmaNome'] ??
+          dadosProva['turmaNome'] ??
+          dadosProva['turma'] ??
+          '')
           .toString();
 
-      String turmaNomeFinal =
-          (dadosFolha['turmaNome'] ??
-                  dadosProva['turmaNome'] ??
-                  dadosProva['turma'] ??
-                  '')
-              .toString();
-
-      String disciplinaFinal =
-          (dadosProva['disciplina'] ??
-                  dadosProva['disciplinaNome'] ??
-                  dadosProva['materia'] ??
-                  '')
-              .toString();
+      final disciplinaFinal = (dadosProva['disciplina'] ??
+          dadosProva['disciplinaNome'] ??
+          dadosProva['materia'] ??
+          '')
+          .toString();
 
       if (turmaNomeFinal.isEmpty && turmaId.isNotEmpty) {
         final turmaDoc = await _db.collection('turmas').doc(turmaId).get();
 
         if (turmaDoc.exists) {
           final dadosTurma = turmaDoc.data() ?? {};
-
-          turmaNomeFinal =
-              (dadosTurma['nome'] ??
-                      dadosTurma['turmaNome'] ??
-                      dadosTurma['nomeTurma'] ??
-                      '')
-                  .toString();
+          turmaNomeFinal = (dadosTurma['nome'] ??
+              dadosTurma['turmaNome'] ??
+              dadosTurma['nomeTurma'] ??
+              '')
+              .toString();
         }
       }
 
       String nomeAlunoFinal = (dadosFolha['alunoNome'] ?? '').toString();
-
       String matriculaFinal = (dadosFolha['matricula'] ?? '').toString();
 
       if (nomeAlunoFinal.isEmpty && alunoId != null && alunoId.isNotEmpty) {
@@ -402,10 +406,9 @@ class _CorrigirState extends State<Corrigir> {
 
           if (docAluno.exists) {
             final dadosAluno = docAluno.data() ?? {};
-
             nomeAlunoFinal = (dadosAluno['nome'] ?? 'Aluno').toString();
-
-            matriculaFinal = (dadosAluno['matricula'] ?? alunoId).toString();
+            matriculaFinal =
+                (dadosAluno['matricula'] ?? alunoId).toString();
           }
         }
 
@@ -419,111 +422,22 @@ class _CorrigirState extends State<Corrigir> {
         nomeAlunoFinal = 'Aluno não identificado';
       }
 
-      final List<dynamic> respostasOriginais = respostasCapturadas.isNotEmpty
-          ? respostasCapturadas
-          : (dadosFolha['gabarito'] is List
-                ? List<dynamic>.from(dadosFolha['gabarito'])
-                : []);
-
-      if (respostasOriginais.isEmpty) {
-        throw Exception(
-          'Nenhuma resposta encontrada. Leia o QR Code da folha do aluno.',
-        );
-      }
-
-      final List<String> respostasFinais = List.generate(
-        questoesCarregadas.length,
-        (i) {
-          if (i >= respostasOriginais.length) {
-            return '';
-          }
-
-          return normalizarResposta(
-            respostasOriginais[i],
-            (questoesCarregadas[i]['alternativas'] as List).length,
-          );
-        },
-      );
-
-      int acertos = 0;
-      int emBranco = 0;
-
-      for (int i = 0; i < questoesCarregadas.length; i++) {
-        final marcada = respostasFinais[i];
-        final correta = questoesCarregadas[i]['gabarito'].toString();
-
-        if (marcada.isEmpty) {
-          emBranco++;
-        } else if (marcada == correta) {
-          acertos++;
-        }
-      }
-
-      final total = questoesCarregadas.length;
-      final erros = total - acertos - emBranco;
-      final nota = (acertos / total) * 10.0;
-      final aproveitamento = acertos / total;
-
-      final respostasDetalhadas = List.generate(total, (i) {
-        final marcada = respostasFinais[i];
-        final gabarito = questoesCarregadas[i]['gabarito'].toString();
-
-        return {
-          'questaoId': questoesCarregadas[i]['id'],
-          'numero': i + 1,
-          'marcada': marcada.isEmpty ? null : marcada,
-          'gabarito': gabarito,
-          'correta': marcada.isNotEmpty && marcada == gabarito,
-        };
-      });
-
-      final usuario = _auth.currentUser;
-
-      if (usuario == null) {
-        throw Exception('Usuário não autenticado.');
-      }
-
-      final dadosCorrecao = {
-        'professorId': usuario.uid,
-        'criadoPor': usuario.uid,
-        'provaId': provaId,
-        'tituloProva': dadosProva['titulo'] ?? dadosProva['nome'] ?? 'Prova',
-        'turma': turmaNomeFinal,
-        'turmaNome': turmaNomeFinal,
-        'disciplina': disciplinaFinal,
-        'turmaId': turmaId,
-        'alunoId': alunoId ?? '',
-        'alunoNome': nomeAlunoFinal,
-        'matricula': matriculaFinal,
-        'versao': dadosFolha['versao'] ?? 1,
-        'respostas': respostasDetalhadas,
-        'totalQuestoes': total,
-        'acertos': acertos,
-        'erros': erros,
-        'emBranco': emBranco,
-        'nota': nota,
-        'aproveitamento': aproveitamento,
-        'dataCorrecao': FieldValue.serverTimestamp(),
-      };
-
-      final correcaoRef = await _db.collection('correcoes').add(dadosCorrecao);
-
-      final correcaoSalva = await correcaoRef.get();
-
-      if (!correcaoSalva.exists) {
-        throw Exception('Não foi possível confirmar o salvamento da correção.');
-      }
-
       if (!mounted) return;
       setState(() {
         _provaSelecionadaId = provaId;
         _prova = dadosProva;
-        _turmaNome = turmaNomeFinal;
-        _disciplinaNome = disciplinaFinal;
         _questoes = questoesCarregadas;
-        _respostasLidas = respostasFinais;
+        _alunoSelecionadoId = alunoId;
         _alunoNome = nomeAlunoFinal;
         _alunoMatricula = matriculaFinal;
+        _turmaNome = turmaNomeFinal;
+        _disciplinaNome = disciplinaFinal;
+        _turmaId = turmaId;
+        _versaoFolha = dadosFolha['versao'] ?? 1;
+        _dadosFolhaSelecionada = dadosFolha;
+        _imagemFolha = null;
+        _respostasLidas = [];
+        _respostasAmbiguas.clear();
         etapa = 2;
       });
     } on FirebaseException catch (e) {
@@ -538,6 +452,196 @@ class _CorrigirState extends State<Corrigir> {
         });
       }
     }
+  }
+
+  Future<void> _capturarFotoFolha() async {
+    if (_questoes.isEmpty) {
+      _mensagem('Nenhuma questão carregada para corrigir.');
+      return;
+    }
+
+    try {
+      final arquivo = await _imagePicker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 100,
+      );
+
+      if (arquivo == null) return;
+
+      setState(() => _carregando = true);
+
+      final bytes = await arquivo.readAsBytes();
+      final bolhas = <BolhaPosicao>[];
+
+      for (var i = 0; i < _questoes.length; i++) {
+        final alternativas =
+        _questoes[i]['alternativas'] as List<dynamic>;
+
+        for (var alternativa = 0;
+        alternativa < alternativas.length;
+        alternativa++) {
+          bolhas.add(
+            BolhaPosicao(
+              questao: i + 1,
+              alternativa: alternativa,
+              x: (_bubbleStartX + alternativa * _bubbleGap + _bubbleSize / 2) /
+                  _pageWidth,
+              y: (_questionTop + i * _rowHeight +
+                  (_rowHeight - _bubbleSize) / 2 +
+                  _bubbleSize / 2) /
+                  _pageHeight,
+              raio: (_bubbleSize / 2) / _pageWidth,
+            ),
+          );
+        }
+      }
+
+      final leitura = OMRLeitor.analisar(
+        bytes: bytes,
+        bolhas: bolhas,
+      );
+
+      final respostas = List<String>.filled(_questoes.length, '');
+      final ambiguas = <int>{};
+
+      for (final resposta in leitura) {
+        final indice = resposta.questao - 1;
+        if (indice < 0 || indice >= respostas.length) continue;
+
+        if (resposta.ambigua) {
+          ambiguas.add(indice);
+        } else if (resposta.alternativa != null) {
+          respostas[indice] =
+              String.fromCharCode(65 + resposta.alternativa!);
+        }
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _imagemFolha = bytes;
+        _respostasLidas = respostas;
+        _respostasAmbiguas
+          ..clear()
+          ..addAll(ambiguas);
+        etapa = 3;
+      });
+    } catch (e) {
+      _mensagem(e.toString().replaceFirst('Exception: ', ''));
+    } finally {
+      if (mounted) {
+        setState(() => _carregando = false);
+      }
+    }
+  }
+
+  Future<void> _salvarCorrecao() async {
+    if (_provaSelecionadaId == null || _prova == null) {
+      _mensagem('Não foi possível identificar a prova.');
+      return;
+    }
+
+    if (_respostasAmbiguas.isNotEmpty) {
+      _mensagem('Revise todas as marcações ambíguas antes de salvar.');
+      return;
+    }
+
+    if (_respostasLidas.length != _questoes.length) {
+      _mensagem('A leitura das respostas está incompleta.');
+      return;
+    }
+
+    setState(() => _carregando = true);
+
+    try {
+      final usuario = _auth.currentUser;
+      if (usuario == null) {
+        throw Exception('Usuário não autenticado.');
+      }
+
+      int acertos = 0;
+      int emBranco = 0;
+
+      for (var i = 0; i < _questoes.length; i++) {
+        final marcada = _respostasLidas[i];
+        final correta = _questoes[i]['gabarito'].toString();
+
+        if (marcada.isEmpty) {
+          emBranco++;
+        } else if (marcada == correta) {
+          acertos++;
+        }
+      }
+
+      final total = _questoes.length;
+      final erros = total - acertos - emBranco;
+      final nota = total == 0 ? 0.0 : (acertos / total) * 10.0;
+      final aproveitamento = total == 0 ? 0.0 : acertos / total;
+
+      final respostasDetalhadas = List.generate(total, (i) {
+        final marcada = _respostasLidas[i];
+        final gabarito = _questoes[i]['gabarito'].toString();
+
+        return {
+          'questaoId': _questoes[i]['id'],
+          'numero': i + 1,
+          'marcada': marcada.isEmpty ? null : marcada,
+          'gabarito': gabarito,
+          'correta': marcada.isNotEmpty && marcada == gabarito,
+        };
+      });
+
+      final dadosCorrecao = {
+        'professorId': usuario.uid,
+        'criadoPor': usuario.uid,
+        'provaId': _provaSelecionadaId,
+        'tituloProva': _prova!['titulo'] ?? _prova!['nome'] ?? 'Prova',
+        'turma': _turmaNome,
+        'turmaNome': _turmaNome,
+        'disciplina': _disciplinaNome,
+        'turmaId': _turmaId,
+        'alunoId': _alunoSelecionadoId ?? '',
+        'alunoNome': _alunoNome,
+        'matricula': _alunoMatricula,
+        'versao': _versaoFolha,
+        'respostas': respostasDetalhadas,
+        'totalQuestoes': total,
+        'acertos': acertos,
+        'erros': erros,
+        'emBranco': emBranco,
+        'nota': nota,
+        'aproveitamento': aproveitamento,
+        'dataCorrecao': FieldValue.serverTimestamp(),
+      };
+
+      final correcaoRef =
+      await _db.collection('correcoes').add(dadosCorrecao);
+      final correcaoSalva = await correcaoRef.get();
+
+      if (!correcaoSalva.exists) {
+        throw Exception('Não foi possível confirmar o salvamento da correção.');
+      }
+
+      if (!mounted) return;
+      setState(() => etapa = 4);
+      _mensagem('Correção salva com sucesso.');
+    } on FirebaseException catch (e) {
+      _mensagem('Erro Firebase: ${e.code} - ${e.message}');
+    } catch (e) {
+      _mensagem(e.toString().replaceFirst('Exception: ', ''));
+    } finally {
+      if (mounted) {
+        setState(() => _carregando = false);
+      }
+    }
+  }
+
+  void _alterarResposta(int indice, String? valor) {
+    if (valor == null) return;
+
+    setState(() {
+      _respostasLidas[indice] = valor;
+      _respostasAmbiguas.remove(indice);
+    });
   }
 
   void _mensagem(String msg) {
@@ -563,6 +667,10 @@ class _CorrigirState extends State<Corrigir> {
       _processandoLeitura = false;
       _turmaNome = '';
       _disciplinaNome = '';
+      _imagemFolha = null;
+      _respostasAmbiguas.clear();
+      _turmaId = '';
+      _versaoFolha = 1;
     });
   }
 
@@ -617,14 +725,16 @@ class _CorrigirState extends State<Corrigir> {
           children: [
             CircularProgressIndicator(color: verde),
             SizedBox(height: 16),
-            Text('Processando gabarito e salvando nota no Firebase...'),
+            Text('Processando folha de respostas...'),
           ],
         ),
       );
     }
 
     if (etapa == 1) return _buildLeitorQrCode();
-    if (etapa == 2) return _buildResultado();
+    if (etapa == 2) return _buildCapturaFoto();
+    if (etapa == 3) return _buildRevisao();
+    if (etapa == 4) return _buildResultado();
     return _buildInicio();
   }
 
@@ -677,7 +787,7 @@ class _CorrigirState extends State<Corrigir> {
           ),
           const SizedBox(height: 10),
           const Text(
-            'Aponte a câmera para o QR Code da folha de respostas para identificar a prova, o aluno e calcular a nota automaticamente.',
+            'Aponte a câmera para o QR Code para identificar a prova e o aluno. Depois, fotografe o cartão-resposta físico para ler as bolinhas.',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 16, color: texto),
           ),
@@ -758,8 +868,8 @@ class _CorrigirState extends State<Corrigir> {
                         value: doc.id,
                         child: Text(
                           '$titulo'
-                          '${disciplina.toString().isNotEmpty ? " • $disciplina" : ""}'
-                          '${turma.toString().isNotEmpty ? " ($turma)" : ""}',
+                              '${disciplina.toString().isNotEmpty ? " • $disciplina" : ""}'
+                              '${turma.toString().isNotEmpty ? " ($turma)" : ""}',
                           overflow: TextOverflow.ellipsis,
                         ),
                       );
@@ -781,12 +891,12 @@ class _CorrigirState extends State<Corrigir> {
                       onPressed: valorValido == null
                           ? null
                           : () {
-                              setState(() {
-                                _mostrarSelecaoAluno = true;
-                                _alunoSelecionadoId = null;
-                                _dadosFolhaSelecionada = null;
-                              });
-                            },
+                        setState(() {
+                          _mostrarSelecaoAluno = true;
+                          _alunoSelecionadoId = null;
+                          _dadosFolhaSelecionada = null;
+                        });
+                      },
                       icon: const Icon(Icons.people_outline),
                       label: const Text('Corrigir Prova Selecionada'),
                       style: OutlinedButton.styleFrom(
@@ -848,7 +958,7 @@ class _CorrigirState extends State<Corrigir> {
                         }
 
                         final alunoValido =
-                            alunos.any((doc) => doc.id == _alunoSelecionadoId)
+                        alunos.any((doc) => doc.id == _alunoSelecionadoId)
                             ? _alunoSelecionadoId
                             : null;
 
@@ -883,7 +993,7 @@ class _CorrigirState extends State<Corrigir> {
                                 if (id == null) return;
 
                                 final aluno = alunos.firstWhere(
-                                  (doc) => doc.id == id,
+                                      (doc) => doc.id == id,
                                 );
 
                                 setState(() {
@@ -900,13 +1010,13 @@ class _CorrigirState extends State<Corrigir> {
                                 onPressed: alunoValido == null
                                     ? null
                                     : () {
-                                        _carregarEProcessarCorrecaoAutomatica(
-                                          provaId: valorValido,
-                                          alunoId: _alunoSelecionadoId,
-                                          dadosFolhaAluno:
-                                              _dadosFolhaSelecionada,
-                                        );
-                                      },
+                                  _carregarDadosParaCorrecao(
+                                    provaId: valorValido,
+                                    alunoId: _alunoSelecionadoId,
+                                    dadosFolhaAluno:
+                                    _dadosFolhaSelecionada,
+                                  );
+                                },
                                 icon: const Icon(Icons.check_circle_outline),
                                 label: const Text('Corrigir Aluno'),
                                 style: _estiloBotao(),
@@ -991,12 +1101,220 @@ class _CorrigirState extends State<Corrigir> {
     );
   }
 
+
+  Widget _buildCapturaFoto() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(28),
+      decoration: BoxDecoration(
+        color: cinza,
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Column(
+        children: [
+          const Icon(Icons.document_scanner_outlined, size: 64, color: verde),
+          const SizedBox(height: 16),
+          const Text(
+            'Fotografar cartão-resposta',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 28,
+              fontFamily: 'Oswald',
+              fontWeight: FontWeight.bold,
+              color: verde,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Prova: ${_prova?['titulo'] ?? _prova?['nome'] ?? 'Prova'}\nAluno: $_alunoNome',
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: texto, fontSize: 16),
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'Coloque a folha inteira em uma superfície plana. Enquadre os quatro marcadores pretos dos cantos, mantenha boa iluminação e evite sombras.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: texto),
+          ),
+          const SizedBox(height: 24),
+          SizedBox(
+            width: double.infinity,
+            height: 54,
+            child: ElevatedButton.icon(
+              onPressed: _capturarFotoFolha,
+              icon: const Icon(Icons.camera_alt_outlined),
+              label: const Text('Fotografar folha'),
+              style: _estiloBotao(),
+            ),
+          ),
+          const SizedBox(height: 10),
+          TextButton(
+            onPressed: _reiniciar,
+            child: const Text('Cancelar', style: TextStyle(color: verde)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRevisao() {
+    final totalAmbiguas = _respostasAmbiguas.length;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text(
+          'Conferir respostas identificadas',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 28,
+            fontFamily: 'Oswald',
+            fontWeight: FontWeight.bold,
+            color: verde,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Aluno: $_alunoNome',
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: texto),
+        ),
+        const SizedBox(height: 12),
+        if (totalAmbiguas > 0)
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.orange.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.orange),
+            ),
+            child: Text(
+              '$totalAmbiguas marcação(ões) ambígua(s). Selecione manualmente a resposta correta em cada questão destacada.',
+              style: const TextStyle(color: texto),
+            ),
+          )
+        else
+          const Text(
+            'Confira as respostas antes de salvar. Você pode alterar qualquer alternativa.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: texto),
+          ),
+        const SizedBox(height: 16),
+        if (_imagemFolha != null)
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Image.memory(
+              _imagemFolha!,
+              height: 220,
+              fit: BoxFit.contain,
+            ),
+          ),
+        const SizedBox(height: 16),
+        ...List.generate(_questoes.length, (i) {
+          final alternativas =
+          _questoes[i]['alternativas'] as List<dynamic>;
+          final opcoes = List.generate(
+            alternativas.length,
+                (j) => String.fromCharCode(65 + j),
+          );
+          final respostaAtual = _respostasLidas[i];
+          final ambigua = _respostasAmbiguas.contains(i);
+
+          return Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: cinza,
+              borderRadius: BorderRadius.circular(12),
+              border: ambigua
+                  ? Border.all(color: Colors.orange, width: 1.5)
+                  : null,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Questão ${i + 1}${ambigua ? ' • revisar marcação' : ''}',
+                  style: const TextStyle(
+                    color: verde,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                if ((_questoes[i]['enunciado'] ?? '').toString().isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 5, bottom: 8),
+                    child: Text(
+                      _questoes[i]['enunciado'].toString(),
+                      style: const TextStyle(color: texto),
+                    ),
+                  ),
+                DropdownButtonFormField<String>(
+                  value: respostaAtual,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Resposta marcada',
+                    border: OutlineInputBorder(),
+                    filled: true,
+                    fillColor: fundo,
+                  ),
+                  items: [
+                    const DropdownMenuItem(
+                      value: '',
+                      child: Text('Em branco'),
+                    ),
+                    ...opcoes.map(
+                          (opcao) => DropdownMenuItem(
+                        value: opcao,
+                        child: Text(
+                          '$opcao — ${alternativas[opcoes.indexOf(opcao)]}',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
+                  ],
+                  onChanged: (valor) => _alterarResposta(i, valor),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Gabarito oficial: ${_questoes[i]['gabarito']}',
+                  style: const TextStyle(color: verde, fontSize: 12),
+                ),
+              ],
+            ),
+          );
+        }),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 54,
+          child: ElevatedButton.icon(
+            onPressed: totalAmbiguas > 0 ? null : _salvarCorrecao,
+            icon: const Icon(Icons.save_outlined),
+            label: const Text('Confirmar e salvar correção'),
+            style: _estiloBotao(),
+          ),
+        ),
+        TextButton.icon(
+          onPressed: _capturarFotoFolha,
+          icon: const Icon(Icons.camera_alt_outlined, color: verde),
+          label: const Text(
+            'Tirar outra foto',
+            style: TextStyle(color: verde),
+          ),
+        ),
+        TextButton(
+          onPressed: _reiniciar,
+          child: const Text('Cancelar correção', style: TextStyle(color: verde)),
+        ),
+      ],
+    );
+  }
+
   Widget _buildResultado() {
     int acertos = 0;
     int emBranco = 0;
 
     for (int i = 0; i < _questoes.length; i++) {
-      final resp = _respostasLidas[i];
+      final resp = i < _respostasLidas.length ? _respostasLidas[i] : '';
       if (resp == null || resp.toString().isEmpty) {
         emBranco++;
       } else if (resp.toString() == _questoes[i]['gabarito'].toString()) {
@@ -1033,7 +1351,7 @@ class _CorrigirState extends State<Corrigir> {
         ),
         const SizedBox(height: 6),
         Text(
-          'Nota salva automaticamente no Firebase',
+          'Nota salva no Firebase após conferência',
           style: TextStyle(
             fontSize: 14,
             color: verde.withValues(alpha: 0.85),

@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
-import '../../data/mock_relatorios.dart';
 import '../../models/relatorio.dart';
+import '../../models/turma.dart';
+import '../../service/relatorio_service.dart';
+import '../../service/turma_service.dart';
 import '../../widgets/drawernav.dart';
 import '../../widgets/header.dart';
 import '../../widgets/navegar.dart';
@@ -22,24 +26,124 @@ class Relatorios extends StatefulWidget {
 
 class _RelatoriosState extends State<Relatorios> {
   final TextEditingController _buscaController = TextEditingController();
+  final RelatorioService _relatorioService = RelatorioService();
+  final TurmaService _turmaService = TurmaService();
+
+  StreamSubscription<List<ProvaCorrigida>>? _subProvas;
+  StreamSubscription<List<Turma>>? _subTurmas;
+
+  // Dados vindos do Firestore
+  List<ProvaCorrigida> _provas = [];
+  List<Turma> _turmas = [];
+  final Map<String, int> _alunosPorTurma = {};
+
+  bool _carregandoProvas = true;
+  bool _carregandoTurmas = true;
+  Object? _erro;
 
   String _turmaSelecionada = 'Todas';
   String _disciplinaSelecionada = 'Todas';
   String _busca = '';
 
   @override
+  void initState() {
+    super.initState();
+
+    _subProvas = _relatorioService.observarProvasCorrigidas().listen(
+      (provas) {
+        if (!mounted) return;
+        setState(() {
+          _provas = provas;
+          _carregandoProvas = false;
+          _erro = null;
+        });
+      },
+      onError: (Object e) {
+        if (!mounted) return;
+        setState(() {
+          _carregandoProvas = false;
+          _erro = e;
+        });
+      },
+    );
+
+    _subTurmas = _turmaService.getTurmas().listen(
+      (turmas) {
+        if (!mounted) return;
+        setState(() {
+          _turmas = turmas;
+          _carregandoTurmas = false;
+        });
+        _carregarContagemAlunos(turmas);
+      },
+      onError: (Object e) {
+        if (!mounted) return;
+        setState(() {
+          _carregandoTurmas = false;
+          _erro = e;
+        });
+      },
+    );
+  }
+
+  @override
   void dispose() {
+    _subProvas?.cancel();
+    _subTurmas?.cancel();
     _buscaController.dispose();
     super.dispose();
   }
 
+  /// Busca no banco quantos alunos cada turma tem cadastrados.
+  Future<void> _carregarContagemAlunos(List<Turma> turmas) async {
+    for (final turma in turmas) {
+      try {
+        final total = await _relatorioService.contarAlunos(turma.id);
+        if (!mounted) return;
+        setState(() => _alunosPorTurma[turma.id] = total);
+      } catch (_) {
+        // Sem a contagem a tela usa o número de alunos já corrigidos.
+      }
+    }
+  }
+
+  // ------------------------------------------------------------- filtros
+
+  static String _normalizar(String s) =>
+      s.trim().replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
+
+  bool _provaDaTurma(ProvaCorrigida prova, Turma turma) {
+    if (prova.turmaId.isNotEmpty) return prova.turmaId == turma.id;
+    return _normalizar(prova.turma) == _normalizar(turma.nome);
+  }
+
+  /// Turma escolhida no filtro (null = "Todas").
+  Turma? get _turmaFiltro {
+    if (_turmaSelecionada == 'Todas') return null;
+    for (final turma in _turmas) {
+      if (turma.nome == _turmaSelecionada) return turma;
+    }
+    return null;
+  }
+
+  /// Opções do filtro de turma: as turmas cadastradas no banco.
+  List<String> get _opcoesTurma =>
+      ['Todas', ..._turmas.map((t) => t.nome)];
+
+  /// Opções do filtro de disciplina: as que existem nas provas do banco.
+  List<String> get _opcoesDisciplina {
+    final set = _provas.map((p) => p.disciplina).toSet().toList()..sort();
+    return ['Todas', ...set];
+  }
+
   List<ProvaCorrigida> get _provasFiltradas {
-    return provasCorrigidasMock.where((prova) {
-      final porTurma =
-          _turmaSelecionada == 'Todas' || prova.turma == _turmaSelecionada;
+    final turma = _turmaFiltro;
+    final texto = _busca.trim().toLowerCase();
+
+    return _provas.where((prova) {
+      final porTurma = turma == null || _provaDaTurma(prova, turma);
       final porDisciplina = _disciplinaSelecionada == 'Todas' ||
           prova.disciplina == _disciplinaSelecionada;
-      final texto = _busca.trim().toLowerCase();
       final porTexto = texto.isEmpty ||
           prova.titulo.toLowerCase().contains(texto) ||
           prova.disciplina.toLowerCase().contains(texto) ||
@@ -48,22 +152,6 @@ class _RelatoriosState extends State<Relatorios> {
     }).toList()
       ..sort((a, b) => b.dataCorrecao.compareTo(a.dataCorrecao));
   }
-
-  double get _mediaGeral {
-    final provas = _provasFiltradas;
-    if (provas.isEmpty) return 0;
-    return provas.fold<double>(0, (a, p) => a + p.media) / provas.length;
-  }
-
-  double get _aproveitamentoGeral {
-    final provas = _provasFiltradas;
-    if (provas.isEmpty) return 0;
-    return provas.fold<double>(0, (a, p) => a + p.percentualAcertoGeral) /
-        provas.length;
-  }
-
-  int get _totalCorrecoes =>
-      _provasFiltradas.fold<int>(0, (a, p) => a + p.totalAlunos);
 
   void _abrirProva(ProvaCorrigida prova) {
     Navigator.push(
@@ -127,17 +215,30 @@ class _RelatoriosState extends State<Relatorios> {
   // ---------------------------------------------------------------- PROVAS
 
   Widget _abaProvas() {
+    if (_carregandoProvas) {
+      return const Center(
+        child: CircularProgressIndicator(color: CoresRel.verde),
+      );
+    }
+    if (_erro != null && _provas.isEmpty) {
+      return _ListaVazia(
+        mensagem: 'Não foi possível carregar as provas corrigidas.\n$_erro',
+      );
+    }
+
     final provas = _provasFiltradas;
 
     return Column(
       children: [
-        _painelResumo(),
+        _painelResumo(provas),
         _filtros(),
         Expanded(
           child: provas.isEmpty
-              ? const _ListaVazia(
-                  mensagem:
-                      'Nenhuma prova corrigida encontrada com esses filtros.',
+              ? _ListaVazia(
+                  mensagem: _provas.isEmpty
+                      ? 'Nenhuma prova corrigida ainda. Corrija uma prova '
+                          'para ela aparecer aqui.'
+                      : 'Nenhuma prova corrigida encontrada com esses filtros.',
                 )
               : ListView.builder(
                   padding: const EdgeInsets.only(top: 4, bottom: 16),
@@ -155,7 +256,12 @@ class _RelatoriosState extends State<Relatorios> {
     );
   }
 
-  Widget _painelResumo() {
+  /// Quadros de resumo: sempre calculados sobre as provas filtradas, então
+  /// ao escolher uma turma mostram os números daquela turma.
+  Widget _painelResumo(List<ProvaCorrigida> provas) {
+    final resumo = ResumoTurma(turma: _turmaSelecionada, provas: provas);
+    final daTurma = _turmaFiltro != null;
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
       child: Row(
@@ -163,28 +269,28 @@ class _RelatoriosState extends State<Relatorios> {
           Expanded(
             child: CartaoResumo(
               rotulo: 'Provas',
-              valor: '${_provasFiltradas.length}',
+              valor: '${resumo.totalProvas}',
               icone: Icons.fact_check_outlined,
-              complemento: '$_totalCorrecoes correções',
+              complemento: '${resumo.totalCorrecoes} correções',
             ),
           ),
           const SizedBox(width: 8),
           Expanded(
             child: CartaoResumo(
               rotulo: 'Média',
-              valor: formatarNota(_mediaGeral),
+              valor: formatarNota(resumo.media),
               icone: Icons.trending_up,
-              cor: corPorNota(_mediaGeral),
-              complemento: 'geral das provas',
+              cor: corPorNota(resumo.media),
+              complemento: daTurma ? 'da turma' : 'geral das provas',
             ),
           ),
           const SizedBox(width: 8),
           Expanded(
             child: CartaoResumo(
               rotulo: 'Acertos',
-              valor: formatarPercentual(_aproveitamentoGeral),
+              valor: formatarPercentual(resumo.percentualAcerto),
               icone: Icons.check_circle_outline,
-              cor: corPorAproveitamento(_aproveitamentoGeral),
+              cor: corPorAproveitamento(resumo.percentualAcerto),
               complemento: 'das respostas',
             ),
           ),
@@ -231,7 +337,7 @@ class _RelatoriosState extends State<Relatorios> {
                 child: _SeletorFiltro(
                   icone: Icons.groups_outlined,
                   valor: _turmaSelecionada,
-                  opcoes: turmasMock(),
+                  opcoes: _opcoesTurma,
                   onChanged: (valor) =>
                       setState(() => _turmaSelecionada = valor),
                 ),
@@ -241,7 +347,7 @@ class _RelatoriosState extends State<Relatorios> {
                 child: _SeletorFiltro(
                   icone: Icons.menu_book_outlined,
                   valor: _disciplinaSelecionada,
-                  opcoes: disciplinasMock(),
+                  opcoes: _opcoesDisciplina,
                   onChanged: (valor) =>
                       setState(() => _disciplinaSelecionada = valor),
                 ),
@@ -256,13 +362,35 @@ class _RelatoriosState extends State<Relatorios> {
   // ---------------------------------------------------------------- TURMAS
 
   Widget _abaTurmas() {
-    final resumos = resumosPorTurmaMock();
+    if (_carregandoTurmas || _carregandoProvas) {
+      return const Center(
+        child: CircularProgressIndicator(color: CoresRel.verde),
+      );
+    }
+    if (_turmas.isEmpty) {
+      return const _ListaVazia(
+        mensagem: 'Nenhuma turma cadastrada. Crie uma turma para ver o '
+            'desempenho dela aqui.',
+      );
+    }
+
+    // Uma linha por turma cadastrada no banco, com as provas dela.
+    final resumos = _turmas.map((turma) {
+      return ResumoTurma(
+        turma: turma.nome,
+        turmaId: turma.id,
+        provas: _provas.where((p) => _provaDaTurma(p, turma)).toList(),
+        alunosCadastrados: _alunosPorTurma[turma.id],
+      );
+    }).toList();
 
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
       itemCount: resumos.length,
       itemBuilder: (context, index) {
         final resumo = resumos[index];
+        final temProvas = resumo.totalProvas > 0;
+
         return Padding(
           padding: const EdgeInsets.only(bottom: 10),
           child: Material(
@@ -270,7 +398,20 @@ class _RelatoriosState extends State<Relatorios> {
             borderRadius: BorderRadius.circular(16),
             child: InkWell(
               borderRadius: BorderRadius.circular(16),
-              onTap: () => _abrirTurma(resumo),
+              onTap: () {
+                if (temProvas) {
+                  _abrirTurma(resumo);
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      behavior: SnackBarBehavior.floating,
+                      content: Text(
+                        'Esta turma ainda não tem provas corrigidas.',
+                      ),
+                    ),
+                  );
+                }
+              },
               child: Container(
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
@@ -296,23 +437,31 @@ class _RelatoriosState extends State<Relatorios> {
                           ),
                         ),
                         Text(
-                          formatarNota(resumo.media),
+                          temProvas ? formatarNota(resumo.media) : '—',
                           style: TextStyle(
                             fontFamily: 'Oswald',
                             fontSize: 18,
                             fontWeight: FontWeight.w600,
-                            color: corPorNota(resumo.media),
+                            color: temProvas
+                                ? corPorNota(resumo.media)
+                                : CoresRel.textoSuave,
                           ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 10),
-                    BarraDesempenho(percentual: resumo.percentualAcerto),
+                    BarraDesempenho(
+                      percentual: temProvas ? resumo.percentualAcerto : 0,
+                    ),
                     const SizedBox(height: 8),
                     Text(
-                      '${resumo.totalProvas} prova(s) corrigida(s) · '
-                      '${resumo.totalAlunos} alunos · '
-                      '${formatarPercentual(resumo.taxaAprovacao)} de aprovação',
+                      temProvas
+                          ? '${resumo.totalProvas} prova(s) corrigida(s) · '
+                              '${resumo.totalAlunos} alunos · '
+                              '${formatarPercentual(resumo.taxaAprovacao)} '
+                              'de aprovação'
+                          : 'Nenhuma prova corrigida · '
+                              '${resumo.totalAlunos} alunos',
                       style: rotuloStyle,
                     ),
                   ],
@@ -355,7 +504,7 @@ class _SeletorFiltro extends StatelessWidget {
           Expanded(
             child: DropdownButtonHideUnderline(
               child: DropdownButton<String>(
-                value: valor,
+                value: opcoes.contains(valor) ? valor : opcoes.first,
                 isExpanded: true,
                 isDense: true,
                 style: const TextStyle(fontSize: 13, color: CoresRel.texto),

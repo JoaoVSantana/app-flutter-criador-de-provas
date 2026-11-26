@@ -50,6 +50,7 @@ class _ListaAlunosScreenState extends State<ListaAlunosScreen> {
           alunoId: aluno.id,
           nome: nome,
         );
+        return null;
       },
     );
   }

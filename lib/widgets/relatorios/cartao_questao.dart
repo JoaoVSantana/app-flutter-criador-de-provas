@@ -34,7 +34,7 @@ class CartaoQuestao extends StatelessWidget {
                 height: 34,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: cor.withOpacity(0.12),
+                  color: cor.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(
@@ -114,7 +114,7 @@ class CartaoQuestao extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: CoresRel.ruim.withOpacity(0.08),
+                color: CoresRel.ruim.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Row(
@@ -196,7 +196,7 @@ class _LinhaAlternativa extends StatelessWidget {
                 minHeight: 10,
                 backgroundColor: CoresRel.fundo,
                 valueColor: AlwaysStoppedAnimation<Color>(
-                  cor.withOpacity(correta || maisMarcada ? 0.85 : 0.4),
+                  cor.withValues(alpha: correta || maisMarcada ? 0.85 : 0.4),
                 ),
               ),
             ),
@@ -227,7 +227,7 @@ class _Selo extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: cor.withOpacity(0.12),
+        color: cor.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(

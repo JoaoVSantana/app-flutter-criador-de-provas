@@ -65,7 +65,7 @@ class GraficoFaixasNotas extends StatelessWidget {
                             decoration: BoxDecoration(
                               color: valor == 0
                                   ? CoresRel.borda
-                                  : cor.withOpacity(0.85),
+                                  : cor.withValues(alpha: 0.85),
                               borderRadius: const BorderRadius.vertical(
                                 top: Radius.circular(6),
                               ),

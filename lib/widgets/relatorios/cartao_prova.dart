@@ -112,7 +112,7 @@ class _SeloNota extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: cor.withOpacity(0.12),
+        color: cor.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -128,7 +128,7 @@ class _SeloNota extends StatelessWidget {
           ),
           Text(
             'média',
-            style: TextStyle(fontSize: 10, color: cor.withOpacity(0.9)),
+            style: TextStyle(fontSize: 10, color: cor.withValues(alpha: 0.9)),
           ),
         ],
       ),

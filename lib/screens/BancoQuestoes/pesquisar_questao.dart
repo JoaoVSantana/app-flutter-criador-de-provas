@@ -118,7 +118,7 @@ class _SearchQuestionsPageState extends State<SearchQuestionsPage> {
                         : ListView.separated(
                             padding: const EdgeInsets.only(bottom: 24),
                             itemCount: lista.length,
-                            separatorBuilder: (_, __) =>
+                            separatorBuilder: (_, _) =>
                                 const SizedBox(height: 12),
                             itemBuilder: (_, i) => QuestionCard(
                               question: lista[i],

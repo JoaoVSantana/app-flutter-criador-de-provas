@@ -99,7 +99,7 @@ class BarraDesempenho extends StatelessWidget {
       child: LinearProgressIndicator(
         value: valor,
         minHeight: altura,
-        backgroundColor: fundo ?? CoresRel.verdeClaro.withOpacity(0.6),
+        backgroundColor: fundo ?? CoresRel.verdeClaro.withValues(alpha: 0.6),
         valueColor: AlwaysStoppedAnimation<Color>(
           cor ?? corPorAproveitamento(valor),
         ),
@@ -155,7 +155,7 @@ class TituloTela extends StatelessWidget {
               ],
             ),
           ),
-          if (acao != null) acao!,
+          ?acao,
         ],
       ),
     );

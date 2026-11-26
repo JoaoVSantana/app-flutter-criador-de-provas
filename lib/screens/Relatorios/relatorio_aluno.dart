@@ -146,7 +146,7 @@ class _LinhaResposta extends StatelessWidget {
             height: 30,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: cor.withOpacity(0.12),
+              color: cor.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(9),
             ),
             child: Text(
@@ -224,7 +224,7 @@ class _Bolinha extends StatelessWidget {
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             border: Border.all(color: cor),
-            color: cor.withOpacity(0.10),
+            color: cor.withValues(alpha: 0.10),
           ),
           child: Text(
             letra,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../models/relatorio.dart';
+import '../../service/exportar_prova_excel.dart';
 import '../../widgets/drawernav.dart';
 import '../../widgets/header.dart';
 import '../../widgets/navegar.dart';
@@ -24,19 +25,38 @@ class RelatorioProvaScreen extends StatefulWidget {
 class _RelatorioProvaScreenState extends State<RelatorioProvaScreen> {
   bool _somenteQuestoesCriticas = false;
   bool _ordenarPorNome = false;
+  bool _exportando = false;
 
   ProvaCorrigida get prova => widget.prova;
 
-  void _exportarPlanilha() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        backgroundColor: CoresRel.verde,
-        behavior: SnackBarBehavior.floating,
-        content: Text(
-          'Planilha de notas de "${prova.titulo}" pronta para exportação (.xlsx).',
+  /// Gera o .xlsx da prova (resumo, notas, questões e respostas) e abre o
+  /// compartilhamento do sistema para salvar ou enviar o arquivo.
+  Future<void> _exportarPlanilha() async {
+    if (_exportando) return;
+    setState(() => _exportando = true);
+
+    final mensagens = ScaffoldMessenger.of(context);
+    // Necessário para o menu de compartilhar no iPad
+    final caixa = context.findRenderObject() as RenderBox?;
+    final origem =
+        caixa != null ? caixa.localToGlobal(Offset.zero) & caixa.size : null;
+
+    try {
+      await ExportadorProvaExcel.exportar(
+        prova,
+        origemCompartilhamento: origem,
+      );
+    } catch (e) {
+      mensagens.showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.red.shade700,
+          behavior: SnackBarBehavior.floating,
+          content: Text('Não foi possível exportar a planilha: $e'),
         ),
-      ),
-    );
+      );
+    } finally {
+      if (mounted) setState(() => _exportando = false);
+    }
   }
 
   @override
@@ -55,10 +75,22 @@ class _RelatorioProvaScreenState extends State<RelatorioProvaScreen> {
           onAvancar: null,
         ),
         floatingActionButton: FloatingActionButton.extended(
-          onPressed: _exportarPlanilha,
+          onPressed: _exportando ? null : _exportarPlanilha,
           backgroundColor: CoresRel.verde,
-          icon: const Icon(Icons.table_view_outlined, color: Colors.white),
-          label: const Text('Exportar', style: TextStyle(color: Colors.white)),
+          icon: _exportando
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              : const Icon(Icons.table_view_outlined, color: Colors.white),
+          label: Text(
+            _exportando ? 'Gerando...' : 'Exportar',
+            style: const TextStyle(color: Colors.white),
+          ),
         ),
         body: Column(
           children: [
@@ -318,7 +350,7 @@ class _RelatorioProvaScreenState extends State<RelatorioProvaScreen> {
                           CircleAvatar(
                             radius: 16,
                             backgroundColor:
-                                corPorNota(nota).withOpacity(0.15),
+                                corPorNota(nota).withValues(alpha: 0.15),
                             child: Text(
                               '$posicao',
                               style: TextStyle(
@@ -404,7 +436,7 @@ class _RelatorioProvaScreenState extends State<RelatorioProvaScreen> {
               ),
               Switch(
                 value: _somenteQuestoesCriticas,
-                activeColor: CoresRel.verde,
+                activeThumbColor: CoresRel.verde,
                 onChanged: (valor) =>
                     setState(() => _somenteQuestoesCriticas = valor),
               ),

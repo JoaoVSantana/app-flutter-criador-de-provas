@@ -158,11 +158,6 @@ class _ProvaDoAlunoPageState extends State<ProvaDoAlunoPage> {
                 ),
               ),
               const SizedBox(height: 12),
-              Text(
-                'Gabarito: $gabarito',
-                style: TextStyle(fontSize: 13, color: Colors.grey.shade800),
-              ),
-              const SizedBox(height: 12),
               PreviaPapel(
                 titulo: prova.titulo,
                 subtitulo: 'Versão ${folha.versao}',
@@ -170,6 +165,7 @@ class _ProvaDoAlunoPageState extends State<ProvaDoAlunoPage> {
                 nomeAluno: folha.alunoNome,
                 turmaNome: folha.turmaNome,
                 codigo: folha.codigo,
+                gabarito: gabarito,
               ),
               const SizedBox(height: 16),
               Center(

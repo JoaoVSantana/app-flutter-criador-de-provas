@@ -11,6 +11,7 @@ class Home extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    print('HOME FOI CONSTRUÍDA');
     return LayoutBuilder(
       builder: (context, constraints) {
         final larguraTela = constraints.maxWidth;
@@ -76,25 +77,6 @@ class Home extends StatelessWidget {
                                 ConstrainedBox(
                                   constraints: const BoxConstraints(
                                     maxWidth: 800,
-                                  ),
-                                  child: Text(
-                                    'Menos tempo corrigindo. Mais tempo ensinando, '
-                                    'uma nova forma de criar, corrigir e acompanhar '
-                                    'suas avaliações.',
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                      fontSize: (larguraTela * 0.04).clamp(
-                                        14.0,
-                                        16.0,
-                                      ),
-                                      fontFamily: 'Poppins',
-                                      color: const Color.fromARGB(
-                                        255,
-                                        66,
-                                        94,
-                                        83,
-                                      ),
-                                    ),
                                   ),
                                 ),
                               ],

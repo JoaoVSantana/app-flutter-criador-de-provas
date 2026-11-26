@@ -1,27 +1,31 @@
-import 'package:flutter/material.dart';
+/*import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+
 import '../../widgets/header.dart';
 import '../../widgets/navegar.dart';
 import '../../widgets/drawernav.dart';
 
 class FolhaRespostaScreen extends StatelessWidget {
+  final String alunoId;
+  final String turmaId;
   final String nomeAluno;
-  final String matricula;
   final String turma;
 
   const FolhaRespostaScreen({
     super.key,
+    required this.alunoId,
+    required this.turmaId,
     required this.nomeAluno,
-    required this.matricula,
     required this.turma,
   });
 
   @override
   Widget build(BuildContext context) {
-    final String qrCodeData = '{"matricula":"$matricula","turma":"$turma","prova":"MAT_01"}';
+    final String qrCodeData =
+        '{"matricula":"$matricula","turma":"$turma","prova":"MAT_01"}';
 
     return Scaffold(
-      drawer: const DrawerNav(), 
+      drawer: const DrawerNav(),
       appBar: const PreferredSize(
         preferredSize: Size.fromHeight(60),
         child: Header(),
@@ -47,7 +51,9 @@ class FolhaRespostaScreen extends StatelessWidget {
                     label: const Text('Imprimir'),
                     onPressed: () {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Simulando envio para impressora...')),
+                        const SnackBar(
+                          content: Text('Simulando envio para impressora...'),
+                        ),
                       );
                     },
                   ),
@@ -79,11 +85,22 @@ class FolhaRespostaScreen extends StatelessWidget {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text('AVALIAÇÃO OFICIAL', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                              const Text(
+                                'AVALIAÇÃO OFICIAL',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 18,
+                                ),
+                              ),
                               const SizedBox(height: 12),
-                              Text('Nome: $nomeAluno', style: const TextStyle(fontSize: 14)),
-                              Text('Turma: $turma', style: const TextStyle(fontSize: 14)),
-                              Text('Matrícula: $matricula', style: const TextStyle(fontSize: 14)),
+                              Text(
+                                'Nome: $nomeAluno',
+                                style: const TextStyle(fontSize: 14),
+                              ),
+                              Text(
+                                'Turma: $turma',
+                                style: const TextStyle(fontSize: 14),
+                              ),
                             ],
                           ),
                         ),
@@ -97,7 +114,13 @@ class FolhaRespostaScreen extends StatelessWidget {
                     const SizedBox(height: 16),
                     const Divider(thickness: 2, color: Colors.black),
                     const SizedBox(height: 8),
-                    const Text('FOLHA DE RESPOSTAS', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    const Text(
+                      'FOLHA DE RESPOSTAS',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
                     const SizedBox(height: 16),
                     ...List.generate(10, (index) {
                       return Padding(
@@ -107,7 +130,12 @@ class FolhaRespostaScreen extends StatelessWidget {
                           children: [
                             SizedBox(
                               width: 30,
-                              child: Text('${index + 1}.', style: const TextStyle(fontWeight: FontWeight.bold)),
+                              child: Text(
+                                '${index + 1}.',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                             ),
                             _buildBolinha('A'),
                             _buildBolinha('B'),
@@ -139,9 +167,8 @@ class FolhaRespostaScreen extends StatelessWidget {
         shape: BoxShape.circle,
         border: Border.all(color: Colors.black, width: 1.5),
       ),
-      child: Center(
-        child: Text(letra, style: const TextStyle(fontSize: 12)),
-      ),
+      child: Center(child: Text(letra, style: const TextStyle(fontSize: 12))),
     );
   }
 }
+*/

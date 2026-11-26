@@ -1,4 +1,3 @@
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -6,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../widgets/drawernav.dart';
 import '../../widgets/header.dart';
 import '../../widgets/navegar.dart';
+import '../BancoQuestoes/elem_comuns.dart' show MenuTitle;
 
 class Corrigir extends StatefulWidget {
   const Corrigir({super.key});
@@ -17,6 +17,15 @@ class Corrigir extends StatefulWidget {
 class _CorrigirState extends State<Corrigir> {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  // Seta de voltar da barra de baixo: volta uma etapa da correção;
+  // na primeira etapa e no resultado, sai da tela.
+  void _voltar() {
+    if (etapa == 0 || etapa == 4) {
+      Navigator.pop(context);
+    } else {
+      setState(() => etapa -= 1);
+    }
+  }
 
   static const Color fundo = Color.fromARGB(255, 228, 235, 230);
   static const Color cinza = Color.fromARGB(255, 212, 214, 213);
@@ -82,9 +91,10 @@ class _CorrigirState extends State<Corrigir> {
         final q = qDoc.data()!;
         final alternativas = List<String>.from(q['alternativas'] ?? []);
         final corretas = List<int>.from(q['corretas'] ?? []);
-        final letraCorreta = corretas.isNotEmpty &&
-            corretas.first >= 0 &&
-            corretas.first < alternativas.length
+        final letraCorreta =
+            corretas.isNotEmpty &&
+                corretas.first >= 0 &&
+                corretas.first < alternativas.length
             ? String.fromCharCode(65 + corretas.first)
             : '';
 
@@ -189,7 +199,8 @@ class _CorrigirState extends State<Corrigir> {
           'numero': i + 1,
           'marcada': _respostas[i],
           'gabarito': _questoes[i]['gabarito'],
-          'correta': _respostas[i] != null &&
+          'correta':
+              _respostas[i] != null &&
               _respostas[i] == _questoes[i]['gabarito'],
         };
       });
@@ -250,7 +261,9 @@ class _CorrigirState extends State<Corrigir> {
                 children: [
                   TextField(
                     controller: nomeController,
-                    decoration: const InputDecoration(labelText: 'Título da prova'),
+                    decoration: const InputDecoration(
+                      labelText: 'Título da prova',
+                    ),
                   ),
                   TextField(
                     controller: disciplinaController,
@@ -273,14 +286,19 @@ class _CorrigirState extends State<Corrigir> {
                     child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                       stream: _db
                           .collection('questoes')
+                          .where('professorId', isEqualTo: _uid)
                           .snapshots(),
                       builder: (context, snapshot) {
                         if (snapshot.hasError) {
-                          return const Center(child: Text('Erro ao carregar questões.'));
+                          return const Center(
+                            child: Text('Erro ao carregar questões.'),
+                          );
                         }
 
                         if (!snapshot.hasData) {
-                          return const Center(child: CircularProgressIndicator());
+                          return const Center(
+                            child: CircularProgressIndicator(),
+                          );
                         }
 
                         final docs = snapshot.data!.docs;
@@ -296,7 +314,8 @@ class _CorrigirState extends State<Corrigir> {
                           itemBuilder: (context, index) {
                             final doc = docs[index];
                             final dados = doc.data();
-                            final titulo = (dados['enunciado'] ?? 'Questão').toString();
+                            final titulo = (dados['enunciado'] ?? 'Questão')
+                                .toString();
 
                             return CheckboxListTile(
                               value: selecionadas.contains(doc.id),
@@ -409,9 +428,8 @@ class _CorrigirState extends State<Corrigir> {
   void _mensagem(String mensagem) {
     if (!mounted) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(mensagem)),
-    );
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(mensagem)));
   }
 
   void _reiniciar() {
@@ -431,40 +449,31 @@ class _CorrigirState extends State<Corrigir> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: fundo,
+      drawer: const DrawerNav(),
+      appBar: const PreferredSize(
+        preferredSize: Size.fromHeight(60),
+        child: Header(),
+      ),
+      bottomNavigationBar: Navegar(
+        onVoltar: _voltar,
+        onAvancar: null, // as etapas avançam pelos botões da própria tela
+      ),
       body: SafeArea(
-        child: Column(
-          children: [
-            const Header(),
-            Expanded(
-              child: Scaffold(
-                drawer: const DrawerNav(),
-                backgroundColor: fundo,
-                appBar: AppBar(
-                  backgroundColor: fundo,
-                  foregroundColor: verde,
-                  elevation: 0,
-                  title: const Text('Correção de provas'),
-                  leading: Builder(
-                    builder: (context) => IconButton(
-                      icon: const Icon(Icons.menu),
-                      onPressed: () => Scaffold.of(context).openDrawer(),
-                    ),
-                  ),
-                ),
-                body: SingleChildScrollView(
-                  padding: const EdgeInsets.all(24),
-                  child: Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 900),
-                      child: _buildConteudo(),
-                    ),
-                  ),
-                ),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 900),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const MenuTitle(title: 'Correção de provas', fontSize: 28),
+                  const SizedBox(height: 16),
+                  _buildConteudo(),
+                ],
               ),
             ),
-            const Navegar(onVoltar: null, onAvancar: null),
-            const SizedBox(height: 16),
-          ],
+          ),
         ),
       ),
     );
@@ -536,6 +545,7 @@ class _CorrigirState extends State<Corrigir> {
           StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
             stream: _db
                 .collection('provas')
+                .where('professorId', isEqualTo: _uid)
                 .snapshots(),
             builder: (context, snapshot) {
               if (snapshot.hasError) {
@@ -552,7 +562,9 @@ class _CorrigirState extends State<Corrigir> {
                 children: [
                   if (docs.isNotEmpty)
                     DropdownButtonFormField<String>(
-                      value: docs.any((d) => d.id == _provaId) ? _provaId : null,
+                      value: docs.any((d) => d.id == _provaId)
+                          ? _provaId
+                          : null,
                       isExpanded: true,
                       decoration: InputDecoration(
                         labelText: 'Prova cadastrada',
@@ -746,7 +758,11 @@ class _CorrigirState extends State<Corrigir> {
             );
           }),
           const SizedBox(height: 16),
-          _botao('Continuar para respostas', Icons.arrow_forward, _irParaRespostas),
+          _botao(
+            'Continuar para respostas',
+            Icons.arrow_forward,
+            _irParaRespostas,
+          ),
           TextButton(
             onPressed: () => setState(() => etapa = 1),
             child: const Text('Voltar'),
@@ -898,10 +914,7 @@ class _CorrigirState extends State<Corrigir> {
             children: [
               const Text(
                 'NOTA FINAL',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: verde,
-                ),
+                style: TextStyle(fontWeight: FontWeight.bold, color: verde),
               ),
               const SizedBox(height: 6),
               Text(
@@ -930,7 +943,11 @@ class _CorrigirState extends State<Corrigir> {
               children: [
                 SizedBox(
                   width: largura,
-                  child: _infoCard('Acertos', '$acertos', Icons.check_circle_outline),
+                  child: _infoCard(
+                    'Acertos',
+                    '$acertos',
+                    Icons.check_circle_outline,
+                  ),
                 ),
                 SizedBox(
                   width: largura,
@@ -938,7 +955,11 @@ class _CorrigirState extends State<Corrigir> {
                 ),
                 SizedBox(
                   width: largura,
-                  child: _infoCard('Em branco', '$emBranco', Icons.remove_circle_outline),
+                  child: _infoCard(
+                    'Em branco',
+                    '$emBranco',
+                    Icons.remove_circle_outline,
+                  ),
                 ),
                 SizedBox(
                   width: largura,
@@ -973,7 +994,9 @@ class _CorrigirState extends State<Corrigir> {
               ),
               const SizedBox(height: 14),
               Text('Aluno: ${_nomeController.text.trim()}'),
-              Text('Matrícula: ${_matriculaController.text.trim().isEmpty ? '—' : _matriculaController.text.trim()}'),
+              Text(
+                'Matrícula: ${_matriculaController.text.trim().isEmpty ? '—' : _matriculaController.text.trim()}',
+              ),
               Text('Turma: ${_prova?['turma'] ?? '—'}'),
               Text('Disciplina: ${_prova?['disciplina'] ?? '—'}'),
               Text('Prova: ${_prova?['titulo'] ?? '—'}'),
@@ -1008,9 +1031,7 @@ class _CorrigirState extends State<Corrigir> {
         prefixIcon: Icon(icone, color: verde),
         filled: true,
         fillColor: fundo,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-        ),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
       ),
     );
   }
@@ -1034,9 +1055,7 @@ class _CorrigirState extends State<Corrigir> {
       foregroundColor: Colors.white,
       disabledBackgroundColor: verde.withOpacity(0.4),
       elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(10),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
     );
   }
 

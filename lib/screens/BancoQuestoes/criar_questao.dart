@@ -1,35 +1,93 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
+import '../../models/materia.dart';
+import '../../service/materia_service.dart';
 import 'elem_comuns.dart';
 
+const _novo = '__novo__';
+
 class CreateQuestionSheet extends StatefulWidget {
-  const CreateQuestionSheet({super.key});
+  /// Se vier preenchida, a tela funciona como edição dessa questão.
+  final Question? questao;
+
+  const CreateQuestionSheet({super.key, this.questao});
 
   @override
   State<CreateQuestionSheet> createState() => _CreateQuestionSheetState();
 }
 
 class _CreateQuestionSheetState extends State<CreateQuestionSheet> {
+  final _materiaService = MateriaService();
+  StreamSubscription<List<Materia>>? _sub;
+  List<Materia> _materias = [];
+
   int _step = 0;
   String? _erro;
 
-  String? _materia;
-  final _assunto = TextEditingController();
+  String? _materiaId;
+  String? _assunto;
   Nivel? _nivel;
-  final Set<String> _turmas = {};
-  Tipo? _tipo;
 
   final _enunciado = TextEditingController();
-  final List<TextEditingController> _alts = List.generate(
-    4,
-    (_) => TextEditingController(),
-  );
-  Set<int> _corretas = {};
-  bool _variasCorretas = false;
+  late final List<TextEditingController> _alts;
+  int? _correta;
+
+  bool get _editando => widget.questao != null;
+
+  @override
+  void initState() {
+    super.initState();
+
+    final q = widget.questao;
+    final alts = q?.alternativas ?? const <String>[];
+    final qtd = alts.length >= 2 ? alts.length : 4;
+    _alts = List.generate(
+      qtd,
+      (i) => TextEditingController(text: i < alts.length ? alts[i] : ''),
+    );
+
+    if (q != null) {
+      _nivel = q.nivel;
+      _enunciado.text = q.enunciado;
+      _correta = q.corretas.isEmpty ? null : q.corretas.first;
+      _prepararEdicao(q);
+    }
+
+    _sub = _materiaService.observar().listen(
+      (lista) {
+        if (mounted) setState(() => _materias = lista);
+      },
+      onError: (e) {
+        if (mounted) setState(() => _erro = 'Erro ao carregar matérias: $e');
+      },
+    );
+  }
+
+  /// Seleciona a matéria e o assunto da questão. Se ainda não existirem no
+  /// cadastro do professor (questões antigas), cria.
+  Future<void> _prepararEdicao(Question q) async {
+    if (q.materia.trim().isEmpty) return;
+    try {
+      final m = await _materiaService.criarMateria(q.materia);
+      if (q.assunto.isNotEmpty && !m.assuntos.contains(q.assunto)) {
+        await _materiaService.adicionarAssunto(m.id, q.assunto);
+      }
+      if (!mounted) return;
+      setState(() {
+        _materiaId = m.id;
+        _assunto = q.assunto.isEmpty ? null : q.assunto;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _erro = 'Erro ao carregar a questão: $e');
+    }
+  }
 
   @override
   void dispose() {
-    _assunto.dispose();
+    _sub?.cancel();
     _enunciado.dispose();
     for (final c in _alts) {
       c.dispose();
@@ -37,27 +95,84 @@ class _CreateQuestionSheetState extends State<CreateQuestionSheet> {
     super.dispose();
   }
 
-  void _proximo() {
-    if (_materia == null) return _setErro('Escolha a matéria.');
-    if (_nivel == null) return _setErro('Escolha o nível da questão.');
-    if (_turmas.isEmpty) return _setErro('Marque pelo menos uma turma.');
-    if (_tipo == null) return _setErro('Escolha o tipo de questão.');
-    setState(() {
-      _erro = null;
-      _corretas = {};
-      _step = 1;
-    });
+  Materia? get _materiaAtual {
+    for (final m in _materias) {
+      if (m.id == _materiaId) return m;
+    }
+    return null;
   }
+
+  bool get _podeAvancar =>
+      _materiaAtual != null && _assunto != null && _nivel != null;
 
   void _setErro(String msg) => setState(() => _erro = msg);
 
-  void _toggleCorreta(int i) {
+  Future<void> _criarMateria() async {
+    final nome = await showDialog<String>(
+      context: context,
+      builder: (_) => const _NomeDialog(
+        titulo: 'Nova matéria',
+        rotulo: 'Nome da matéria',
+        exemplo: 'Ex.: Matemática',
+      ),
+    );
+    if (nome == null || !mounted) return;
+
+    try {
+      final m = await _materiaService.criarMateria(nome);
+      if (!mounted) return;
+      setState(() {
+        _materiaId = m.id;
+        _assunto = null;
+        _erro = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      _setErro('Não foi possível criar a matéria: $e');
+    }
+  }
+
+  Future<void> _criarAssunto() async {
+    final materia = _materiaAtual;
+    if (materia == null) return;
+
+    final nome = await showDialog<String>(
+      context: context,
+      builder: (_) => const _NomeDialog(
+        titulo: 'Novo assunto',
+        rotulo: 'Nome do assunto',
+        exemplo: 'Ex.: Funções, Revolução Francesa',
+      ),
+    );
+    if (nome == null || !mounted) return;
+
+    // Se já existir (ignorando maiúsculas), só seleciona
+    final existente = materia.assuntos.where(
+      (a) => a.toLowerCase() == nome.toLowerCase(),
+    );
+    if (existente.isNotEmpty) {
+      setState(() => _assunto = existente.first);
+      return;
+    }
+
+    try {
+      await _materiaService.adicionarAssunto(materia.id, nome);
+      if (!mounted) return;
+      setState(() {
+        _assunto = nome;
+        _erro = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      _setErro('Não foi possível criar o assunto: $e');
+    }
+  }
+
+  void _proximo() {
+    if (!_podeAvancar) return;
     setState(() {
-      if (_variasCorretas) {
-        _corretas.contains(i) ? _corretas.remove(i) : _corretas.add(i);
-      } else {
-        _corretas = {i};
-      }
+      _erro = null;
+      _step = 1;
     });
   }
 
@@ -71,10 +186,11 @@ class _CreateQuestionSheetState extends State<CreateQuestionSheet> {
     setState(() {
       final c = _alts.removeAt(i);
       WidgetsBinding.instance.addPostFrameCallback((_) => c.dispose());
-      _corretas = _corretas
-          .where((c) => c != i)
-          .map((c) => c > i ? c - 1 : c)
-          .toSet();
+      if (_correta == i) {
+        _correta = null;
+      } else if (_correta != null && _correta! > i) {
+        _correta = _correta! - 1;
+      }
     });
   }
 
@@ -82,33 +198,25 @@ class _CreateQuestionSheetState extends State<CreateQuestionSheet> {
     if (_enunciado.text.trim().isEmpty) {
       return _setErro('Escreva o enunciado da questão.');
     }
-    if (_tipo == Tipo.multipla) {
-      if (_alts.any((c) => c.text.trim().isEmpty)) {
-        return _setErro(
-          'Preencha todas as alternativas (ou remova as vazias).',
-        );
-      }
-      if (_corretas.isEmpty) {
-        return _setErro('Marque qual alternativa é a correta.');
-      }
+    if (_alts.any((c) => c.text.trim().isEmpty)) {
+      return _setErro('Preencha todas as alternativas (ou remova as vazias).');
     }
-    if (_tipo == Tipo.vf && _corretas.isEmpty) {
-      return _setErro('Escolha se a afirmação é verdadeira ou falsa.');
+    if (_correta == null) {
+      return _setErro('Marque qual alternativa é a correta.');
     }
 
     final q = Question(
-      id: DateTime.now().microsecondsSinceEpoch.toString(),
-      materia: _materia!,
-      assunto: _assunto.text.trim(),
+      // na edição mantém o id e o código da questão original
+      id:
+          widget.questao?.id ??
+          DateTime.now().microsecondsSinceEpoch.toString(),
+      codigo: widget.questao?.codigo ?? '',
+      materia: _materiaAtual!.nome,
+      assunto: _assunto!,
       nivel: _nivel!,
-      tipo: _tipo!,
-      turmas: _turmas.toList(),
       enunciado: _enunciado.text.trim(),
-      alternativas: switch (_tipo!) {
-        Tipo.multipla => _alts.map((c) => c.text.trim()).toList(),
-        Tipo.vf => ['Verdadeiro', 'Falso'],
-      },
-      corretas: _corretas,
+      alternativas: _alts.map((c) => c.text.trim()).toList(),
+      corretas: {_correta!},
     );
     Navigator.pop(context, q);
   }
@@ -127,10 +235,10 @@ class _CreateQuestionSheetState extends State<CreateQuestionSheet> {
           children: [
             Row(
               children: [
-                const Expanded(
+                Expanded(
                   child: Text(
-                    'Nova questão',
-                    style: TextStyle(
+                    _editando ? 'Editar questão' : 'Nova questão',
+                    style: const TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.w700,
                       color: kGreen,
@@ -175,8 +283,15 @@ class _CreateQuestionSheetState extends State<CreateQuestionSheet> {
                 Expanded(
                   child: FilledButton(
                     style: FilledButton.styleFrom(backgroundColor: kGreen),
-                    onPressed: _step == 0 ? _proximo : _finalizar,
-                    child: Text(_step == 0 ? 'Próximo' : 'Finalizar'),
+                    // No passo 1, só habilita com matéria, assunto e nível
+                    onPressed: _step == 0
+                        ? (_podeAvancar ? _proximo : null)
+                        : _finalizar,
+                    child: Text(
+                      _step == 0
+                          ? 'Próximo'
+                          : (_editando ? 'Salvar' : 'Finalizar'),
+                    ),
                   ),
                 ),
               ],
@@ -192,29 +307,97 @@ class _CreateQuestionSheetState extends State<CreateQuestionSheet> {
     child: Text(text, style: const TextStyle(fontWeight: FontWeight.w700)),
   );
 
+  // Seletor controlado (sem estado interno), para o item "Criar ..." nunca
+  // ficar marcado como escolhido.
+  Widget _seletor({
+    required String rotulo,
+    required String? valor,
+    required List<DropdownMenuItem<String>> itens,
+    required ValueChanged<String?>? onChanged,
+  }) {
+    return InputDecorator(
+      isEmpty: valor == null,
+      decoration: InputDecoration(
+        labelText: rotulo,
+        enabled: onChanged != null,
+        border: const OutlineInputBorder(),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 16,
+        ),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: valor,
+          isDense: true,
+          isExpanded: true,
+          items: itens,
+          onChanged: onChanged,
+        ),
+      ),
+    );
+  }
+
   Widget _etapa1() {
+    final materia = _materiaAtual;
+    final assuntos = materia?.assuntos ?? const <String>[];
+    final assuntoValor = assuntos.contains(_assunto) ? _assunto : null;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        DropdownButtonFormField<String>(
-          value: _materia,
-          decoration: const InputDecoration(
-            labelText: 'Matéria',
-            border: OutlineInputBorder(),
-          ),
-          items: kMaterias
-              .map((m) => DropdownMenuItem(value: m, child: Text(m)))
-              .toList(),
-          onChanged: (v) => setState(() => _materia = v),
+        _seletor(
+          rotulo: 'Matéria',
+          valor: materia?.id,
+          itens: <DropdownMenuItem<String>>[
+            ..._materias.map(
+              (m) => DropdownMenuItem(
+                value: m.id,
+                child: Text(m.nome, overflow: TextOverflow.ellipsis),
+              ),
+            ),
+            const DropdownMenuItem(
+              value: _novo,
+              child: _OpcaoCriar('Criar matéria'),
+            ),
+          ],
+          onChanged: (v) {
+            if (v == _novo) {
+              _criarMateria();
+              return;
+            }
+            setState(() {
+              _materiaId = v;
+              _assunto = null;
+            });
+          },
         ),
         const SizedBox(height: 14),
-        TextField(
-          controller: _assunto,
-          decoration: const InputDecoration(
-            labelText: 'Assunto (opcional)',
-            hintText: 'Ex.: Funções, Revolução Francesa',
-            border: OutlineInputBorder(),
-          ),
+        _seletor(
+          rotulo: 'Assunto',
+          valor: assuntoValor,
+          itens: <DropdownMenuItem<String>>[
+            ...assuntos.map(
+              (a) => DropdownMenuItem(
+                value: a,
+                child: Text(a, overflow: TextOverflow.ellipsis),
+              ),
+            ),
+            const DropdownMenuItem(
+              value: _novo,
+              child: _OpcaoCriar('Criar assunto'),
+            ),
+          ],
+          // Só libera depois de escolher a matéria
+          onChanged: materia == null
+              ? null
+              : (v) {
+                  if (v == _novo) {
+                    _criarAssunto();
+                    return;
+                  }
+                  setState(() => _assunto = v);
+                },
         ),
         _label('Nível da questão'),
         SizedBox(
@@ -230,33 +413,14 @@ class _CreateQuestionSheetState extends State<CreateQuestionSheet> {
                 setState(() => _nivel = s.isEmpty ? null : s.first),
           ),
         ),
-        _label('Turmas (pode marcar mais de uma)'),
-        Wrap(
-          spacing: 8,
-          children: kTurmas
-              .map(
-                (t) => FilterChip(
-                  label: Text(t),
-                  selected: _turmas.contains(t),
-                  onSelected: (sel) =>
-                      setState(() => sel ? _turmas.add(t) : _turmas.remove(t)),
-                ),
-              )
-              .toList(),
-        ),
-        _label('Tipo de questão'),
-        Wrap(
-          spacing: 8,
-          children: Tipo.values
-              .map(
-                (t) => ChoiceChip(
-                  label: Text(t.label),
-                  selected: _tipo == t,
-                  onSelected: (_) => setState(() => _tipo = t),
-                ),
-              )
-              .toList(),
-        ),
+        if (!_podeAvancar)
+          Padding(
+            padding: const EdgeInsets.only(top: 16),
+            child: Text(
+              'Escolha matéria, assunto e nível para continuar.',
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+            ),
+          ),
       ],
     );
   }
@@ -265,96 +429,142 @@ class _CreateQuestionSheetState extends State<CreateQuestionSheet> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Text(
+          '${_materiaAtual?.nome ?? ''} · ${_assunto ?? ''} · ${_nivel?.label ?? ''}',
+          style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
+        ),
+        const SizedBox(height: 12),
         TextField(
           controller: _enunciado,
           minLines: 3,
           maxLines: 6,
+          textCapitalization: TextCapitalization.sentences,
           decoration: const InputDecoration(
             labelText: 'Enunciado',
             border: OutlineInputBorder(),
           ),
         ),
-        if (_tipo == Tipo.multipla) ..._alternativas(),
-        if (_tipo == Tipo.vf) ..._verdadeiroFalso(),
+        _label('Alternativas — marque a correta'),
+        for (var i = 0; i < _alts.length; i++)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(
+              children: [
+                IconButton(
+                  tooltip: 'Marcar como correta',
+                  onPressed: () => setState(() => _correta = i),
+                  icon: Icon(
+                    _correta == i
+                        ? Icons.radio_button_checked
+                        : Icons.radio_button_unchecked,
+                    color: _correta == i ? kGreen : Colors.grey,
+                  ),
+                ),
+                Expanded(
+                  child: TextField(
+                    controller: _alts[i],
+                    decoration: InputDecoration(
+                      labelText: 'Alternativa ${String.fromCharCode(65 + i)}',
+                      border: const OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                  ),
+                ),
+                if (_alts.length > 2)
+                  IconButton(
+                    tooltip: 'Remover',
+                    onPressed: () => _removeAlt(i),
+                    icon: const Icon(Icons.close, size: 20),
+                  ),
+              ],
+            ),
+          ),
+        if (_alts.length < 5)
+          TextButton.icon(
+            onPressed: _addAlt,
+            icon: const Icon(Icons.add),
+            label: const Text('Adicionar alternativa'),
+          ),
       ],
     );
   }
+}
 
-  List<Widget> _alternativas() {
-    return [
-      _label('Alternativas — marque a correta'),
-      for (var i = 0; i < _alts.length; i++)
-        Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: Row(
-            children: [
-              IconButton(
-                tooltip: 'Marcar como correta',
-                onPressed: () => _toggleCorreta(i),
-                icon: Icon(
-                  _corretas.contains(i)
-                      ? (_variasCorretas
-                            ? Icons.check_box
-                            : Icons.radio_button_checked)
-                      : (_variasCorretas
-                            ? Icons.check_box_outline_blank
-                            : Icons.radio_button_unchecked),
-                  color: _corretas.contains(i) ? kGreen : Colors.grey,
-                ),
-              ),
-              Expanded(
-                child: TextField(
-                  controller: _alts[i],
-                  decoration: InputDecoration(
-                    labelText: 'Alternativa ${String.fromCharCode(65 + i)}',
-                    border: const OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                ),
-              ),
-              if (_alts.length > 2)
-                IconButton(
-                  tooltip: 'Remover',
-                  onPressed: () => _removeAlt(i),
-                  icon: const Icon(Icons.close, size: 20),
-                ),
-            ],
-          ),
+class _OpcaoCriar extends StatelessWidget {
+  final String texto;
+  const _OpcaoCriar(this.texto);
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        const Icon(Icons.add, size: 18, color: kGreen),
+        const SizedBox(width: 8),
+        Text(
+          texto,
+          style: const TextStyle(color: kGreen, fontWeight: FontWeight.w600),
         ),
-      if (_alts.length < 5)
-        TextButton.icon(
-          onPressed: _addAlt,
-          icon: const Icon(Icons.add),
-          label: const Text('Adicionar alternativa'),
-        ),
-      SwitchListTile(
-        contentPadding: EdgeInsets.zero,
-        title: const Text('Mais de uma alternativa correta'),
-        value: _variasCorretas,
-        onChanged: (v) => setState(() {
-          _variasCorretas = v;
-          if (!v && _corretas.length > 1) _corretas = {_corretas.first};
-        }),
-      ),
-    ];
+      ],
+    );
+  }
+}
+
+class _NomeDialog extends StatefulWidget {
+  final String titulo;
+  final String rotulo;
+  final String exemplo;
+
+  const _NomeDialog({
+    required this.titulo,
+    required this.rotulo,
+    required this.exemplo,
+  });
+
+  @override
+  State<_NomeDialog> createState() => _NomeDialogState();
+}
+
+class _NomeDialogState extends State<_NomeDialog> {
+  final _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
   }
 
-  List<Widget> _verdadeiroFalso() {
-    return [
-      _label('A afirmação é:'),
-      SizedBox(
-        width: double.infinity,
-        child: SegmentedButton<int>(
-          showSelectedIcon: false,
-          emptySelectionAllowed: true,
-          segments: const [
-            ButtonSegment(value: 0, label: Text('Verdadeiro')),
-            ButtonSegment(value: 1, label: Text('Falso')),
-          ],
-          selected: _corretas,
-          onSelectionChanged: (s) => setState(() => _corretas = s),
+  void _salvar() {
+    final texto = _controller.text.trim();
+    if (texto.isEmpty) return;
+    Navigator.pop(context, texto);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.titulo),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        textCapitalization: TextCapitalization.sentences,
+        decoration: InputDecoration(
+          labelText: widget.rotulo,
+          hintText: widget.exemplo,
+          border: const OutlineInputBorder(),
         ),
+        onSubmitted: (_) => _salvar(),
       ),
-    ];
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          style: FilledButton.styleFrom(backgroundColor: kGreen),
+          onPressed: _salvar,
+          child: const Text('Salvar'),
+        ),
+      ],
+    );
   }
 }

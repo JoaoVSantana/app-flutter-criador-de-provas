@@ -34,7 +34,6 @@ O sistema é destinado principalmente a **professores** que precisam criar, corr
 - Gerenciamento de turmas;
 - Relatórios de desempenho;
 - Estatísticas das respostas;
-- Personalização do layout da prova;
 - Login e gerenciamento dos dados do professor.
 
 ### Benefícios para os professores
@@ -61,13 +60,10 @@ O sistema é destinado principalmente a **professores** que precisam criar, corr
 | RF07 | **Randomização de questões e alternativas:** o sistema deverá permitir a randomização da ordem das questões e das alternativas durante a geração das provas. |
 | RF08 | **Geração de diferentes versões de prova:** o sistema deverá permitir ao professor gerar a mesma versão de prova para todos os alunos ou versões diferentes para cada aluno. |
 | RF09 | **Organização das questões nas páginas:** o sistema deverá organizar automaticamente as questões de modo que uma mesma questão não seja dividida entre duas páginas diferentes. |
-| RF10 | **Importação de alunos:** o sistema deverá permitir a importação de uma lista de alunos para facilitar o cadastro e a associação dos alunos às respectivas provas. |
-| RF11 | **Relatórios estatísticos:** o sistema deverá gerar relatórios estatísticos relacionados ao desempenho dos alunos e à distribuição das respostas em cada questão. |
-| RF12 | **Exportação de resultados:** o sistema deverá permitir a exportação dos resultados e das notas dos alunos em formato de planilha compatível com o Microsoft Excel. |
-| RF13 | **Autenticação e gerenciamento de dados:** o sistema deverá permitir que o professor navegue e utilize as funcionalidades disponíveis sem autenticação, porém deverá exigir login para salvar, acessar e gerenciar seus dados. |
-| RF14 | **Edição do layout da prova:** o sistema deverá permitir ao professor editar e personalizar o layout da prova antes de sua geração. |
-| RF15 | **Aplicação mobile para correção:** o sistema deverá disponibilizar uma interface mobile destinada ao processo de correção, permitindo ao professor seguir o fluxo de leitura do QR Code, gabarito e folha de respostas até a obtenção da nota automática. |
-| RF16 | **Interface mobile para criação:** o sistema deverá disponibilizar uma interface mobile destinada à criação, configuração e gerenciamento das provas e do banco de questões. |
+| RF10 | **Relatórios estatísticos:** o sistema deverá gerar relatórios estatísticos relacionados ao desempenho dos alunos e à distribuição das respostas em cada questão. |
+| RF11 | **Exportação de resultados:** o sistema deverá permitir a exportação dos resultados e das notas dos alunos em formato de planilha compatível com o Microsoft Excel. |
+| RF12 | **Autenticação e gerenciamento de dados:** o sistema deverá permitir que o professor navegue e utilize as funcionalidades disponíveis sem autenticação, porém deverá exigir login para salvar, acessar e gerenciar seus dados. |
+| RF15 | **Aplicação/interface mobile para correção:** o sistema deverá disponibilizar uma interface mobile destinada ao processo de correção, permitindo ao professor seguir o fluxo de leitura do QR Code, gabarito e folha de respostas até a obtenção da nota automática. |
 
 ### 2.2 Não Funcionais (RNF)
 
@@ -79,11 +75,8 @@ O sistema é destinado principalmente a **professores** que precisam criar, corr
 | RNF04 | A arquitetura do sistema deverá ser preparada para suportar o crescimento do volume de provas, alunos, questões, resultados e demais dados armazenados. |
 | RNF05 | O sistema deverá utilizar uma arquitetura modular organizada por funcionalidades (*features*), facilitando a manutenção da aplicação. |
 | RNF06 | O código-fonte deverá seguir uma estrutura padronizada e organizada, permitindo que diferentes integrantes da equipe trabalhem no projeto de forma independente e integrada. |
-| RNF07 | O desenvolvimento deverá utilizar um sistema de controle de versão, adotando uma branch específica para cada funcionalidade ou integrante da equipe e Pull Requests com revisão de código antes da realização do merge. |
-| RNF08 | O sistema deverá possuir testes automatizados básicos, utilizando dados simulados (*mocks*). |
-| RNF10 | A interface deverá apresentar botões, menus e elementos de navegação de forma clara e intuitiva, permitindo que o usuário compreenda facilmente como utilizar o sistema. |
-| RNF11 | A interface deverá utilizar um design minimalista, com cores claras, objetivas e elementos visuais que favoreçam a legibilidade e a facilidade de uso. |
-| RNF12 | A aplicação deverá adaptar sua interface de acordo com o dispositivo utilizado. |
+| RNF7 | A interface deverá apresentar botões, menus e elementos de navegação de forma clara e intuitiva, permitindo que o usuário compreenda facilmente como utilizar o sistema. |
+| RNF8 | A interface deverá utilizar um design minimalista, com cores claras, objetivas e elementos visuais que favoreçam a legibilidade e a facilidade de uso. |
 
 ## 3. Telas do Sistema
 
@@ -110,19 +103,10 @@ Os dados são armazenados no **Firebase Firestore** (NoSQL), em coleções de do
 ```json
 // Coleção: usuarios
 {
-  "cpf": "0999999999",
   "email": "pazesilvajulia@gmail.com",
   "nome": "Julia",
-  "sobrenome": "Paz"
 }
 ```
-
-| Campo | Tipo | Descrição |
-|---|---|---|
-| cpf | String | CPF do professor |
-| email | String | E-mail do professor (usado no login) |
-| nome | String | Nome do professor |
-| sobrenome | String | Sobrenome do professor |
 
 ### Coleção: `turmas`
 
@@ -134,27 +118,15 @@ Os dados são armazenados no **Firebase Firestore** (NoSQL), em coleções de do
 }
 ```
 
-| Campo | Tipo | Descrição |
-|---|---|---|
-| criadoPor | String | UID do professor que criou a turma |
-| nome | String | Nome da turma |
-
 ### Coleção: `alunos`
 
 ```json
 // Coleção: alunos
 {
-  "email": "oliviapazzschornack@gmail.com",
   "nome": "Olívia Paz",
   "turmaID": "5JwwoGmxSXVi8rnMCiaz"
 }
 ```
-
-| Campo | Tipo | Descrição |
-|---|---|---|
-| email | String | E-mail do aluno |
-| nome | String | Nome do aluno |
-| turmaID | String | ID do documento da turma à qual o aluno pertence |
 
 ### Coleção: `questoes`
 
@@ -170,14 +142,6 @@ Os dados são armazenados no **Firebase Firestore** (NoSQL), em coleções de do
 }
 ```
 
-| Campo | Tipo | Descrição |
-|---|---|---|
-| alternativas | Array (String) | Alternativas da questão |
-| assunto | String | Assunto da questão (ex.: Porcentagem) |
-| corretas | Array (int) | Índice(s) da(s) alternativa(s) correta(s) |
-| criadoEm | Timestamp | Data e hora de criação da questão |
-| enunciado | String | Texto da questão |
-| materia | String | Matéria/disciplina da questão |
 
 ### Coleção: `provas`
 
@@ -197,18 +161,6 @@ Os dados são armazenados no **Firebase Firestore** (NoSQL), em coleções de do
   "ultimaCorrecaoEm": "29 de outubro de 2026 às 20:18:27 UTC-3"
 }
 ```
-
-| Campo | Tipo | Descrição |
-|---|---|---|
-| codigoQr | String | Código lido no QR Code da folha de respostas para identificar a prova |
-| criadoEm | Timestamp | Data e hora de criação da prova |
-| disciplina | String | Disciplina da prova |
-| gabarito | Map | Mapa com o ID de cada questão e a alternativa correta (ex.: `"A"`) |
-| professorId | String | UID do professor dono da prova |
-| questoesIds | Array (String) | IDs das questões que compõem a prova |
-| titulo | String | Título da prova |
-| turma | String | Turma para a qual a prova foi aplicada |
-| ultimaCorrecaoEm | Timestamp | Data e hora da última correção realizada |
 
 ### Coleção: `correcoes`
 
@@ -241,29 +193,6 @@ Os dados são armazenados no **Firebase Firestore** (NoSQL), em coleções de do
 }
 ```
 
-| Campo | Tipo | Descrição |
-|---|---|---|
-| acertos | int64 | Quantidade de questões acertadas |
-| alunoNome | String | Nome do aluno |
-| aproveitamento | int64 | Aproveitamento do aluno na prova |
-| dataCorrecao | Timestamp | Data e hora da correção |
-| disciplina | String | Disciplina da prova |
-| emBranco | int64 | Quantidade de questões deixadas em branco |
-| erros | int64 | Quantidade de questões erradas |
-| matricula | String | Matrícula do aluno |
-| nota | int64 | Nota final calculada automaticamente |
-| professorId | String | UID do professor que realizou a correção |
-| provaId | String | ID do documento da prova corrigida |
-| respostas | Array (Map) | Lista com o resultado de cada questão (campos abaixo) |
-| respostas[].correta | Boolean | Indica se o aluno acertou a questão |
-| respostas[].gabarito | String | Alternativa correta segundo o gabarito |
-| respostas[].marcada | String | Alternativa marcada pelo aluno |
-| respostas[].numero | int64 | Número da questão na prova |
-| respostas[].questaoId | String | ID do documento da questão |
-| tituloProva | String | Título da prova |
-| totalQuestoes | int64 | Total de questões da prova |
-| turma | String | Turma do aluno |
-
 ## 5. Stack Tecnológica
 
 - **Flutter**: framework usado para construir a interface e a navegação do app mobile. Com uma única base de código, o app roda em Android e na web, o que atende ao requisito de adaptação ao dispositivo (RNF12).
@@ -286,6 +215,8 @@ lib/
     relatorio.dart
     turma.dart
     usuario.dart
+    matéria.dart
+    usuario.dart
   respostaErro/      # tratamento e padronização de respostas de erro
   screens/           # telas do aplicativo, organizadas por funcionalidade
     BancoQuestoes/   # banco de questões
@@ -297,6 +228,13 @@ lib/
       corrigir.dart
     CriarProva/      # criação das provas
       prova.dart
+      aluno_da_prova.dart
+      layout_prova.dart
+      detalhes_prova.dart
+      pdf_prova.dart
+      previa_papel.dart
+      prova_do_aluno.dart
+      criar_prova.dart
     Entrar/          # autenticação do professor
       breakpoint.dart
       cadastro.dart
@@ -305,22 +243,31 @@ lib/
     Home/            # tela inicial
       home.dart
     Relatorios/      # relatórios e estatísticas
-      relatorio_aluno.dart
-      relatorio_prova.dart
-      relatorio_turma.dart
       relatorios.dart
     Turmas/          # turmas e alunos
       folha_resposta.dart
       lista_alunos.dart
       turmas.dart
+      dialog_nome.dart
   service/           # comunicação com o Firebase e regras do app
     aluno_service.dart
     questao_service.dart
     turma_service.dart
     usuario_service.dart
+    relatorio_service.dart
+    omr_leitor.dart
+    exportar_prova_excel.dart
+    materia_service.dart
   widgets/           # componentes de interface reutilizáveis entre telas
   firebase_options.dart  # configuração de conexão com o Firebase (gerada pelo FlutterFire)
-  main.dart          # ponto de entrada do aplicativo
+  main.dart
+bloco_nav.dart 
+drawernav.dart 
+header.dart 
+navegar.dart 
+nome_usuario_header.dart 
+perfil.dart
+ # ponto de entrada do aplicativo
 docs/
   telas/
   modelo-dados/
@@ -435,40 +382,39 @@ service cloud.firestore {
 
 Ao abrir o app, use a tela de **Cadastro** para criar um professor (e-mail e senha) e depois faça **Login**.
 
-## 8. Backlog de Atividades da N2
+## 8. Backlog de Atividades da N3
 
 ### Amanda Specht
 
-| Tarefa | Prazo | Status |
+| Tarefa 
 |---|---|---|
-| Criação e configuração do Firebase Auth para cadastro e login | 29/10/26 | Finalizado |
-| Configuração do banco de dados para o banco de questões | 29/10/26 | Finalizado |
-| Compartilhamento do Firebase com os outros membros da equipe | 29/10/26 | Finalizado |
-| Criação da tela de banco de questões (pendente da N1) | 29/10/26 | Finalizado |
-| Escrita do README da N2 | 29/10/26 | Finalizado |
+| Cadastrar matérias e poder alterá-las
+| Criar tela para visualizar dados do usuário 
+| Compartilhamento do Firebase com os outros membros da equipe 
+| Criação da tela de banco de questões (pendente da N1) 
+| Escrita do README da N2 | 29/10/26 
 
 ### Giovanni Micheluzzi
 
-| Tarefa | Prazo | Status |
+| Tarefa 
 |---|---|---|
-| Habilitar a correção das provas por aluno | 29/10/26 | Finalizado |
-| Exibir o resultado final para o professor | 29/10/26 | Finalizado |
-| Importar os resultados para os relatórios | 29/10/26 | Finalizado |
+| Habilitar a correção das provas por aluno 
+| Exibir o resultado final para o professor 
+| Importar os resultados para os relatórios 
 
 ### João Santana
 
-| Tarefa | Prazo | Status |
+| Tarefa
 |---|---|---|
-| Criação da tela de criação de prova | 29/10/26 | Finalizado |
-| Conexão com o banco de dados para criação de prova | 29/10/26 | Finalizado |
-| Conexão com o banco de dados para relatórios | 29/10/26 | Finalizado |
+| Criação de relatórios com dados reais
+| Exportação de Excel com estatísticas 
 | Envio de todos os documentos (APK, código e README) | 29/10/26 | Finalizado |
 
 ### Júlia Paz
 
-| Tarefa | Prazo | Status |
+| Tarefa 
 |---|---|---|
-| Conexão com o banco de dados das turmas | 29/10/26 | Finalizado |
-| Cadastro de alunos com UID próprio por professor e aluno | 29/10/26 | Finalizado |
+| Conexão com o banco de dados das turmas 
+| Cadastro de alunos com UID próprio por professor e aluno 
 
 ---

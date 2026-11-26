@@ -40,6 +40,10 @@ dependencies:
   pdf: ^3.13.1
   printing: ^5.15.1
   mobile_scanner: ^7.5.0
+  syncfusion_flutter_xlsio: ^34.1.32
+  share_plus: ^13.2.1
+  image_picker: ^1.2.4
+  image: ^4.13.1
 
 dev_dependencies:
   flutter_test:

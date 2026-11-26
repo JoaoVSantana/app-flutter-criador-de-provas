@@ -22,7 +22,11 @@ class RelatorioTurmaScreen extends StatelessWidget {
 
     for (final prova in resumo.provas) {
       for (final resultado in prova.resultados) {
-        final chave = resultado.matricula;
+        // Alunos reais do banco são identificados pelo id; a matrícula pode
+        // estar vazia.
+        final chave = resultado.alunoId.isNotEmpty
+            ? resultado.alunoId
+            : '${resultado.matricula}|${resultado.nome}';
         final registro = acumulado.putIfAbsent(
           chave,
           () => _MediaAluno(
@@ -164,9 +168,11 @@ class RelatorioTurmaScreen extends StatelessWidget {
                             CircleAvatar(
                               radius: 14,
                               backgroundColor:
-                                  corPorNota(aluno.media).withOpacity(0.15),
+                                  corPorNota(aluno.media).withValues(alpha: 0.15),
                               child: Text(
-                                aluno.nome.substring(0, 1),
+                                aluno.nome.isEmpty
+                                    ? '?'
+                                    : aluno.nome.substring(0, 1),
                                 style: TextStyle(
                                   fontSize: 12,
                                   fontWeight: FontWeight.w600,

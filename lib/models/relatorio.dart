@@ -24,8 +24,11 @@ class ResultadoAluno {
     required this.nome,
     required this.matricula,
     required this.respostas,
+    this.alunoId = '',
   });
 
+  /// Id do aluno no Firestore (turmas/{turmaId}/alunos/{alunoId}).
+  final String alunoId;
   final String nome;
   final String matricula;
 
@@ -115,6 +118,7 @@ class ProvaCorrigida {
     required this.dataCorrecao,
     required this.questoes,
     required this.resultados,
+    this.turmaId = '',
     this.versoes = 1,
     this.notaMinimaAprovacao = 6.0,
   });
@@ -123,6 +127,9 @@ class ProvaCorrigida {
   final String titulo;
   final String disciplina;
   final String turma;
+
+  /// Id da turma no Firestore (vazio se a correção não guardou o id).
+  final String turmaId;
   final DateTime dataCorrecao;
   final List<Questao> questoes;
   final List<ResultadoAluno> resultados;
@@ -247,35 +254,66 @@ class ProvaCorrigida {
   }
 }
 
-/// Consolidado de uma turma somando todas as provas já corrigidas dela.
+/// Consolidado de uma turma (ou de qualquer conjunto de provas filtrado)
+/// somando todas as provas já corrigidas dela.
 class ResumoTurma {
-  ResumoTurma({required this.turma, required this.provas});
+  ResumoTurma({
+    required this.turma,
+    required this.provas,
+    this.turmaId = '',
+    this.alunosCadastrados,
+  });
 
   final String turma;
+  final String turmaId;
   final List<ProvaCorrigida> provas;
+
+  /// Quantidade de alunos cadastrados na turma (vinda do banco), quando
+  /// conhecida. Sem ela, usa o maior número de alunos corrigidos numa prova.
+  final int? alunosCadastrados;
 
   int get totalProvas => provas.length;
 
-  int get totalAlunos =>
-      provas.isEmpty ? 0 : provas.map((p) => p.totalAlunos).reduce((a, b) => a > b ? a : b);
+  /// Total de folhas corrigidas (soma dos alunos de todas as provas).
+  int get totalCorrecoes =>
+      provas.fold<int>(0, (a, p) => a + p.totalAlunos);
 
+  int get totalAlunos {
+    if (alunosCadastrados != null) return alunosCadastrados!;
+    return provas.isEmpty
+        ? 0
+        : provas.map((p) => p.totalAlunos).reduce((a, b) => a > b ? a : b);
+  }
+
+  /// Média de todas as notas lançadas (cada correção pesa igual).
   double get media {
-    if (provas.isEmpty) return 0;
-    final soma = provas.fold<double>(0, (a, p) => a + p.media);
-    return soma / provas.length;
+    final total = totalCorrecoes;
+    if (total == 0) return 0;
+    final soma = provas.fold<double>(
+      0,
+      (a, p) => a + p.notas.fold<double>(0, (x, y) => x + y),
+    );
+    return soma / total;
   }
 
   double get taxaAprovacao {
-    if (provas.isEmpty) return 0;
+    final total = totalCorrecoes;
+    if (total == 0) return 0;
     final aprovados = provas.fold<int>(0, (a, p) => a + p.aprovados);
-    final total = provas.fold<int>(0, (a, p) => a + p.totalAlunos);
-    return total == 0 ? 0 : aprovados / total;
+    return aprovados / total;
   }
 
+  /// Percentual de acerto considerando todas as respostas lidas.
   double get percentualAcerto {
-    if (provas.isEmpty) return 0;
-    final soma = provas.fold<double>(0, (a, p) => a + p.percentualAcertoGeral);
-    return soma / provas.length;
+    var acertos = 0;
+    var respostas = 0;
+    for (final p in provas) {
+      for (final r in p.resultados) {
+        acertos += r.acertos(p.questoes);
+        respostas += p.questoes.length;
+      }
+    }
+    return respostas == 0 ? 0 : acertos / respostas;
   }
 
   /// Provas da turma em ordem cronológica, para acompanhar a evolução.

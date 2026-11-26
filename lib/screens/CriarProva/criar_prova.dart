@@ -25,7 +25,7 @@ class _CriarProvaPageState extends State<CriarProvaPage> {
   final _service = ProvaService();
   final _titulo = TextEditingController();
   final List<Question> _selecionadas = [];
-  static const _maxVersoes = 30;
+  static const _maxVersoes = 70;
   final _versoesController = TextEditingController(text: '2');
   ModoEmbaralhar _modo = ModoEmbaralhar.ambos;
   String? _erro;

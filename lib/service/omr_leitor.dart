@@ -93,6 +93,7 @@ class OMRLeitor {
 
       resultados.putIfAbsent(bolha.questao, () => {});
       resultados[bolha.questao]![bolha.alternativa] = porcentagem;
+      print('OMR Q${bolha.questao} ${String.fromCharCode(65 + bolha.alternativa)}: ${(porcentagem * 100).toStringAsFixed(1)}%');
     }
 
     final respostas = <RespostaLida>[];
@@ -119,16 +120,11 @@ class OMRLeitor {
       final marcada = primeira.value >= 0.60;
       final multipla = segunda != null && segunda.value >= 0.60;
 
-      final duvidosa = segunda != null &&
-          primeira.value - segunda.value < 0.20;
-
       respostas.add(
         RespostaLida(
           questao: questao,
-          alternativa: marcada && !multipla && !duvidosa
-              ? primeira.key
-              : null,
-          ambigua: marcada && (multipla || duvidosa),
+          alternativa: marcada && !multipla ? primeira.key : null,
+          ambigua: marcada && multipla,
           emBranco: !marcada,
         ),
       );
@@ -217,6 +213,7 @@ class OMRLeitor {
   static img.Image _corrigirPerspectiva(img.Image original) {
     final marcadores = _localizarMarcadores(original);
     for (var i = 0; i < marcadores.length; i++) {
+      print('OMR marcador $i: x=${marcadores[i].x.toStringAsFixed(1)}, y=${marcadores[i].y.toStringAsFixed(1)}, w=${marcadores[i].largura}, h=${marcadores[i].altura}');
     }
 
     final destinoX = larguraPagina;

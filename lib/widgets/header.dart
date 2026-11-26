@@ -35,9 +35,18 @@ class _HeaderState extends State<Header> {
         ],
       ),
     );
-    if (sair != true) return;
+    if (sair != true || !mounted) return;
 
+    final navigator = Navigator.of(context);
     await FirebaseAuth.instance.signOut();
+    // Fecha as telas abertas por cima; o AuthGate mostra a tela de entrada
+    navigator.popUntil((r) => r.isFirst);
+  }
+
+  void _abrirPerfil() {
+    // Evita abrir o perfil de novo quando já se está nele
+    if (ModalRoute.of(context)?.settings.name == AppRoutes.perfil) return;
+    Navigator.pushNamed(context, AppRoutes.perfil);
   }
 
   @override
@@ -63,15 +72,13 @@ class _HeaderState extends State<Header> {
         // Monta o botão: logado mostra "Olá, nome", deslogado mostra "Entrar"
         Widget botao({required bool logado, required String texto}) {
           return MouseRegion(
-            cursor: logado
-                ? SystemMouseCursors.basic
-                : SystemMouseCursors.click,
+            cursor: SystemMouseCursors.click,
             onEnter: (_) => setState(() => isHover = true),
             onExit: (_) => setState(() => isHover = false),
             child: InkWell(
-              // logado: sem ação (o botão de sair fica ao lado)
+              // logado: abre o perfil; deslogado: abre a tela de entrada
               onTap: logado
-                  ? null
+                  ? _abrirPerfil
                   : () => Navigator.pushNamed(context, AppRoutes.entrar),
               child: Row(
                 mainAxisSize: MainAxisSize.min,

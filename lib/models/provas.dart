@@ -116,7 +116,21 @@ class VersaoProva {
 String _assinatura(List<ItemVersao> itens) =>
     itens.map((i) => '${i.q}:${i.alts.join(",")}').join('|');
 
-List<VersaoProva> gerarVersoes(List<ProvaQuestao> questoes, int quantidade) {
+/// O que muda de uma versão da prova para outra.
+enum ModoEmbaralhar {
+  questoes,
+  alternativas,
+  ambos;
+
+  bool get mudaQuestoes => this != ModoEmbaralhar.alternativas;
+  bool get mudaAlternativas => this != ModoEmbaralhar.questoes;
+}
+
+List<VersaoProva> gerarVersoes(
+  List<ProvaQuestao> questoes,
+  int quantidade, {
+  ModoEmbaralhar modo = ModoEmbaralhar.ambos,
+}) {
   final rnd = Random();
   final versoes = <VersaoProva>[];
   final vistas = <String>{};
@@ -134,15 +148,15 @@ List<VersaoProva> gerarVersoes(List<ProvaQuestao> questoes, int quantidade) {
   var tentativas = 0;
   while (versoes.length < quantidade && tentativas < quantidade * 60) {
     tentativas++;
-    final ordem = List.generate(questoes.length, (i) => i)..shuffle(rnd);
-    final itens = [
-      for (final q in ordem)
-        ItemVersao(
-          q: q,
-          alts: List.generate(questoes[q].alternativas.length, (k) => k)
-            ..shuffle(rnd),
-        ),
-    ];
+    final ordem = List.generate(questoes.length, (i) => i);
+    if (modo.mudaQuestoes) ordem.shuffle(rnd);
+
+    final itens = <ItemVersao>[];
+    for (final q in ordem) {
+      final alts = List.generate(questoes[q].alternativas.length, (k) => k);
+      if (modo.mudaAlternativas) alts.shuffle(rnd);
+      itens.add(ItemVersao(q: q, alts: alts));
+    }
     if (vistas.add(_assinatura(itens))) {
       versoes.add(VersaoProva(numero: versoes.length + 1, itens: itens));
     }

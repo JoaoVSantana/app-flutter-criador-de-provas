@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import '../Routes/routes.dart';
+import '../models/usuario.dart';
+import '../service/usuario_service.dart';
 
 class DrawerNav extends StatelessWidget {
   const DrawerNav({super.key});
@@ -62,9 +65,49 @@ class DrawerNav extends StatelessWidget {
               texto: 'Relatórios',
               rota: AppRoutes.relatorios,
             ),
+            // Empurra o usuário para a parte de baixo do menu
+            const Spacer(),
+            _itemUsuario(context),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _itemUsuario(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return const SizedBox.shrink();
+
+    const cor = Color.fromARGB(255, 47, 51, 49);
+
+    return StreamBuilder<Usuario?>(
+      stream: UsuarioService().observar(user.uid),
+      builder: (context, snap) {
+        final nome = snap.data?.nome ?? '';
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Divider(height: 1),
+            ListTile(
+              leading: const Icon(Icons.person, color: cor),
+              title: Text(
+                nome.isEmpty ? 'Meu perfil' : nome,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 16, color: cor),
+              ),
+              trailing: const Icon(Icons.chevron_right, color: cor),
+              onTap: () {
+                final atual = ModalRoute.of(context)?.settings.name;
+                Navigator.pop(context); // fecha o menu
+                if (atual != AppRoutes.perfil) {
+                  Navigator.pushNamed(context, AppRoutes.perfil);
+                }
+              },
+            ),
+          ],
+        );
+      },
     );
   }
 

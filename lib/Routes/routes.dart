@@ -8,6 +8,7 @@ import '../screens/Relatorios/relatorios.dart';
 import '../screens/Turmas/turmas.dart';
 import '../screens/CorrigirProvas/corrigir.dart';
 import '../screens/Entrar/entrar.dart';
+import '../widgets/perfil.dart';
 
 class AppRoutes {
   static const home = '/';
@@ -17,6 +18,7 @@ class AppRoutes {
   static const correcao = '/corrigir';
   static const relatorios = '/relatorios';
   static const entrar = '/entrar';
+  static const perfil = '/perfil';
 }
 
 class AuthGate extends StatefulWidget {
@@ -105,6 +107,7 @@ class Routes extends StatelessWidget {
         AppRoutes.entrar: (context) => const Entrar(),
         AppRoutes.listaTurmas: (context) => TurmasScreen(),
         AppRoutes.relatorios: (context) => const Relatorios(),
+        AppRoutes.perfil: (context) => const PerfilScreen(),
       },
     );
   }

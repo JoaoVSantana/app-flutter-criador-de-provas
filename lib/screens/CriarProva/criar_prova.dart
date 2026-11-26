@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../models/provas.dart';
 import '../../service/prova_service.dart';
@@ -21,17 +22,56 @@ class _CriarProvaPageState extends State<CriarProvaPage> {
   final _service = ProvaService();
   final _titulo = TextEditingController();
   final List<Question> _selecionadas = [];
-  int _versoes = 2;
+  static const _maxVersoes = 30;
+  final _versoesController = TextEditingController(text: '2');
+  ModoEmbaralhar _modo = ModoEmbaralhar.ambos;
   String? _erro;
   bool _salvando = false;
 
   @override
   void dispose() {
     _titulo.dispose();
+    _versoesController.dispose();
     super.dispose();
   }
 
   void _setErro(String msg) => setState(() => _erro = msg);
+
+  /// Número digitado no campo de versões (0 quando está vazio).
+  int get _versoes => int.tryParse(_versoesController.text) ?? 0;
+
+  void _escreverVersoes(int valor) {
+    final texto = '$valor';
+    _versoesController.value = TextEditingValue(
+      text: texto,
+      selection: TextSelection.collapsed(offset: texto.length),
+    );
+  }
+
+  void _mudarVersoes(int valor) =>
+      setState(() => _escreverVersoes(valor.clamp(1, _maxVersoes)));
+
+  void _versoesDigitadas(String _) {
+    // Não deixa passar do limite
+    if (_versoes > _maxVersoes) _escreverVersoes(_maxVersoes);
+    setState(() => _erro = null);
+  }
+
+  String get _explicacaoModo => switch (_modo) {
+    ModoEmbaralhar.questoes =>
+      'Muda só a ordem das questões. As alternativas ficam iguais.',
+    ModoEmbaralhar.alternativas =>
+      'Muda só a ordem das alternativas. As questões ficam na mesma ordem.',
+    ModoEmbaralhar.ambos =>
+      'Muda a ordem das questões e também das alternativas.',
+  };
+
+  Widget _opcaoModo(ModoEmbaralhar modo, String texto) => ChoiceChip(
+    label: Text(texto),
+    selected: _modo == modo,
+    selectedColor: kCard,
+    onSelected: (_) => setState(() => _modo = modo),
+  );
 
   List<ProvaQuestao> _paraProvaQuestoes() => _selecionadas
       .map(
@@ -135,6 +175,11 @@ class _CriarProvaPageState extends State<CriarProvaPage> {
       _setErro('Adicione pelo menos uma questão.');
       return;
     }
+    final quantidade = _versoes;
+    if (quantidade < 1) {
+      _setErro('Informe quantas versões você quer (de 1 a $_maxVersoes).');
+      return;
+    }
     final semGabarito = _selecionadas
         .where((q) => q.corretas.isEmpty || q.alternativas.length < 2)
         .toList();
@@ -158,16 +203,17 @@ class _CriarProvaPageState extends State<CriarProvaPage> {
       final r = await _service.criar(
         titulo: titulo,
         questoes: _paraProvaQuestoes(),
-        quantidadeVersoes: _versoes,
+        quantidadeVersoes: quantidade,
+        modo: _modo,
       );
       if (!mounted) return;
 
-      if (r.versoes < _versoes) {
+      if (r.versoes < quantidade) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Só foi possível gerar ${r.versoes} versões diferentes '
-              'com essas questões.',
+              'Só foi possível gerar ${r.versoes} versão(ões) diferente(s) '
+              'com essas questões e esse tipo de embaralhamento.',
             ),
           ),
         );
@@ -294,33 +340,55 @@ class _CriarProvaPageState extends State<CriarProvaPage> {
               Row(
                 children: [
                   IconButton.outlined(
+                    tooltip: 'Diminuir',
                     onPressed: _versoes > 1
-                        ? () => setState(() => _versoes--)
+                        ? () => _mudarVersoes(_versoes - 1)
                         : null,
                     icon: const Icon(Icons.remove),
                   ),
+                  const SizedBox(width: 8),
                   SizedBox(
-                    width: 56,
-                    child: Center(
-                      child: Text(
-                        '$_versoes',
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w700,
+                    width: 72,
+                    child: TextField(
+                      controller: _versoesController,
+                      keyboardType: TextInputType.number,
+                      textAlign: TextAlign.center,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                        LengthLimitingTextInputFormatter(2),
+                      ],
+                      // Ao tocar, seleciona o número para digitar por cima
+                      onTap: () => _versoesController.selection = TextSelection(
+                        baseOffset: 0,
+                        extentOffset: _versoesController.text.length,
+                      ),
+                      onChanged: _versoesDigitadas,
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                      ),
+                      decoration: InputDecoration(
+                        isDense: true,
+                        filled: true,
+                        fillColor: Colors.white,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
                         ),
                       ),
                     ),
                   ),
+                  const SizedBox(width: 8),
                   IconButton.outlined(
-                    onPressed: _versoes < 30
-                        ? () => setState(() => _versoes++)
+                    tooltip: 'Aumentar',
+                    onPressed: _versoes < _maxVersoes
+                        ? () => _mudarVersoes(_versoes + 1)
                         : null,
                     icon: const Icon(Icons.add),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      'A ordem das questões e das alternativas é embaralhada em cada versão.',
+                      'Digite ou use os botões (máximo $_maxVersoes).',
                       style: TextStyle(
                         fontSize: 12,
                         color: Colors.grey.shade700,
@@ -328,6 +396,21 @@ class _CriarProvaPageState extends State<CriarProvaPage> {
                     ),
                   ),
                 ],
+              ),
+              _secao('O que embaralhar'),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _opcaoModo(ModoEmbaralhar.questoes, 'Só questões'),
+                  _opcaoModo(ModoEmbaralhar.alternativas, 'Só alternativas'),
+                  _opcaoModo(ModoEmbaralhar.ambos, 'Os dois'),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '$_explicacaoModo A versão 1 mantém a ordem original.',
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
               ),
               if (_erro != null) ...[
                 const SizedBox(height: 16),

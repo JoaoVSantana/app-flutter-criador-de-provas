@@ -80,10 +80,11 @@ class ProvaService {
     required String titulo,
     required List<ProvaQuestao> questoes,
     required int quantidadeVersoes,
+    ModoEmbaralhar modo = ModoEmbaralhar.ambos,
   }) async {
     final uid = _uid();
     final nomeProf = await _nomeProfessor(uid);
-    final versoes = gerarVersoes(questoes, quantidadeVersoes);
+    final versoes = gerarVersoes(questoes, quantidadeVersoes, modo: modo);
 
     final ref = await _provas.add({
       'titulo': titulo.trim(),

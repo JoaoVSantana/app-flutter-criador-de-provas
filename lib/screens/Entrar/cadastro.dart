@@ -25,6 +25,7 @@ class _CadastroFormState extends State<CadastroForm> {
   final _emailController = TextEditingController();
   final _senhaController = TextEditingController();
   bool _carregando = false;
+  bool _mostrarSenha = false;
 
   @override
   void dispose() {
@@ -93,9 +94,19 @@ class _CadastroFormState extends State<CadastroForm> {
           const SizedBox(height: 16),
           TextField(
             controller: _senhaController,
-            obscureText: true,
+            obscureText: !_mostrarSenha,
             autofillHints: const [AutofillHints.newPassword],
-            decoration: decoracaoCampo('Senha'),
+            decoration: decoracaoCampo('Senha').copyWith(
+              suffixIcon: IconButton(
+                tooltip: _mostrarSenha ? 'Ocultar senha' : 'Mostrar senha',
+                icon: Icon(
+                  _mostrarSenha
+                      ? Icons.visibility_off_outlined
+                      : Icons.visibility_outlined,
+                ),
+                onPressed: () => setState(() => _mostrarSenha = !_mostrarSenha),
+              ),
+            ),
             onSubmitted: (_) => _fazerCadastro(),
           ),
           const SizedBox(height: 24),

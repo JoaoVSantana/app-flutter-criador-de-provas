@@ -21,6 +21,47 @@ class _ProvaState extends State<Prova> {
   final _service = ProvaService();
   late final Stream<List<ProvaSalva>> _stream = _service.observarMinhas();
 
+  // Prova que está com as opções abertas (só uma por vez)
+  String? _abertaId;
+
+  void _alternarOpcoes(String id) {
+    setState(() => _abertaId = _abertaId == id ? null : id);
+  }
+
+  void _editar(ProvaSalva p) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => CriarProvaPage(prova: p)),
+    );
+  }
+
+  Widget _opcoes(ProvaSalva p) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      child: Row(
+        children: [
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: () => _abrir(p),
+              style: OutlinedButton.styleFrom(foregroundColor: kGreen),
+              icon: const Icon(Icons.visibility_outlined, size: 18),
+              label: const Text('Visualizar'),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: FilledButton.icon(
+              onPressed: () => _editar(p),
+              style: FilledButton.styleFrom(backgroundColor: kGreen),
+              icon: const Icon(Icons.edit_outlined, size: 18),
+              label: const Text('Editar'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _nova() {
     Navigator.push(
       context,
@@ -139,52 +180,62 @@ class _ProvaState extends State<Prova> {
                         child: Material(
                           color: kListCard,
                           borderRadius: BorderRadius.circular(16),
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(16),
-                            onTap: () => _abrir(p),
-                            child: Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: Row(
-                                children: [
-                                  const Icon(
-                                    Icons.description_outlined,
-                                    color: kGreen,
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          p.titulo,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: const TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.w700,
-                                          ),
+                          child: Column(
+                            children: [
+                              InkWell(
+                                borderRadius: BorderRadius.circular(16),
+                                onTap: () => _alternarOpcoes(p.id),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(16),
+                                  child: Row(
+                                    children: [
+                                      const Icon(
+                                        Icons.description_outlined,
+                                        color: kGreen,
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              p.titulo,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              [
+                                                '${p.questoes.length} questões',
+                                                '${p.versoes.length} versões',
+                                                if (_data(p.criadoEm)
+                                                    .isNotEmpty)
+                                                  _data(p.criadoEm),
+                                              ].join(' · '),
+                                              style: TextStyle(
+                                                fontSize: 13,
+                                                color: Colors.grey.shade700,
+                                              ),
+                                            ),
+                                          ],
                                         ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          [
-                                            '${p.questoes.length} questões',
-                                            '${p.versoes.length} versões',
-                                            if (_data(p.criadoEm).isNotEmpty)
-                                              _data(p.criadoEm),
-                                          ].join(' · '),
-                                          style: TextStyle(
-                                            fontSize: 13,
-                                            color: Colors.grey.shade700,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
+                                      ),
+                                      Icon(
+                                        _abertaId == p.id
+                                            ? Icons.keyboard_arrow_up
+                                            : Icons.keyboard_arrow_down,
+                                      ),
+                                    ],
                                   ),
-                                  const Icon(Icons.chevron_right),
-                                ],
+                                ),
                               ),
-                            ),
+                              if (_abertaId == p.id) _opcoes(p),
+                            ],
                           ),
                         ),
                       ),

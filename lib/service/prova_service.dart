@@ -97,6 +97,62 @@ class ProvaService {
     return (id: ref.id, versoes: versoes.length);
   }
 
+  /// Quantos alunos já receberam esta prova.
+  Future<int> contarAlunos(String provaId) async {
+    final folhas = await _folhas(provaId)
+        .where('criadoPor', isEqualTo: _uid())
+        .get();
+    return folhas.docs.length;
+  }
+
+  /// Muda só o título; versões e folhas dos alunos continuam iguais.
+  Future<void> renomear(String provaId, String titulo) {
+    return _provas.doc(provaId).update({'titulo': titulo.trim()});
+  }
+
+  /// Salva a prova editada, gera as versões de novo e atualiza a versão e o
+  /// gabarito de quem já tinha a prova. O código de cada aluno é mantido.
+  Future<int> atualizar({
+    required String provaId,
+    required String titulo,
+    required List<ProvaQuestao> questoes,
+    required int quantidadeVersoes,
+    required ModoEmbaralhar modo,
+  }) async {
+    final uid = _uid();
+    final versoes = gerarVersoes(questoes, quantidadeVersoes, modo: modo);
+    final folhas = await _folhas(provaId)
+        .where('criadoPor', isEqualTo: uid)
+        .get();
+    final docs = folhas.docs;
+
+    // Cada lote do Firestore aceita até 500 gravações
+    var batch = _db.batch();
+    batch.update(_provas.doc(provaId), {
+      'titulo': titulo.trim(),
+      'questoes': questoes.map((q) => q.toMap()).toList(),
+      'versoes': versoes.map((v) => v.toMap(questoes)).toList(),
+    });
+    var noLote = 1;
+
+    for (var i = 0; i < docs.length; i++) {
+      if (noLote == 450) {
+        await batch.commit();
+        batch = _db.batch();
+        noLote = 0;
+      }
+      final versao = versoes[i % versoes.length];
+      batch.update(docs[i].reference, {
+        'versao': versao.numero,
+        'gabarito': versao.gabarito(questoes),
+      });
+      noLote++;
+    }
+    await batch.commit();
+
+    return versoes.length;
+  }
+
   /// Exclui a prova e as folhas dos alunos.
   Future<void> excluir(String provaId) async {
     final uid = _uid();
